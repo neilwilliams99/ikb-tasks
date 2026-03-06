@@ -1,11 +1,12 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 
 // ─── CONFIG ────────────────────────────────────────────────────────────────
-// Replace these with your Supabase project details
 const SUPABASE_URL = "https://dgdpiaqabdfsgwcpxuvx.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRnZHBpYXFhYmRmc2d3Y3B4dXZ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3OTk2MDMsImV4cCI6MjA4ODM3NTYwM30.YrdDeGaKKG0GzjKnDaDQoCS0LNl4S9-xYOSldeiZ8gY";
 
-// Simple Supabase REST helper (no SDK needed)
+// Logo — upload to Supabase Storage and paste public URL, or leave empty for text
+const LOGO_URL = "";
+
 const supabase = {
   async query(table, { method = "GET", body, filters = "", headers = {} } = {}) {
     const url = `${SUPABASE_URL}/rest/v1/${table}${filters}`;
@@ -33,7 +34,20 @@ const supabase = {
   },
 };
 
-const useDemo = false;
+// ─── BRAND COLOURS ─────────────────────────────────────────────────────────
+const C = {
+  teal: "#009292",
+  tealDark: "#007a7a",
+  tealLight: "#e6f5f5",
+  grey: "#595A5A",
+  greyLight: "#DEE0E0",
+  white: "#FFFFFF",
+  bg: "#f4f5f5",
+  text: "#333333",
+  textMuted: "#888888",
+  border: "#DEE0E0",
+  danger: "#d9534f",
+};
 
 // ─── SEARCHABLE DROPDOWN ───────────────────────────────────────────────────
 function SearchableDropdown({ options, value, onChange, placeholder, displayKey }) {
@@ -62,23 +76,19 @@ function SearchableDropdown({ options, value, onChange, placeholder, displayKey 
         placeholder={placeholder}
         onFocus={() => { setOpen(true); setSearch(""); }}
         onChange={(e) => setSearch(e.target.value)}
-        style={styles.input}
+        style={S.input}
       />
       {open && (
-        <div style={styles.dropdown}>
-          {filtered.length === 0 && <div style={styles.dropdownEmpty}>No matches</div>}
+        <div style={S.dropdown}>
+          {filtered.length === 0 && <div style={S.dropdownEmpty}>No matches</div>}
           {filtered.map((o, i) => {
             const label = typeof o === "string" ? o : o[displayKey];
             return (
-              <div
-                key={i}
-                onClick={() => { onChange(o); setOpen(false); setSearch(""); }}
-                style={styles.dropdownItem}
-                onMouseEnter={(e) => e.currentTarget.style.background = "#f0ece4"}
+              <div key={i} onClick={() => { onChange(o); setOpen(false); setSearch(""); }}
+                style={S.dropdownItem}
+                onMouseEnter={(e) => e.currentTarget.style.background = C.tealLight}
                 onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
-              >
-                {label}
-              </div>
+              >{label}</div>
             );
           })}
         </div>
@@ -87,42 +97,77 @@ function SearchableDropdown({ options, value, onChange, placeholder, displayKey 
   );
 }
 
-// ─── DATE PICKER ───────────────────────────────────────────────────────────
-function DatePicker({ value, onChange }) {
+// ─── SORTABLE COLUMN HEADER ────────────────────────────────────────────────
+function SortHeader({ label, field, sortField, sortDir, onSort, style }) {
+  const active = sortField === field;
+  const arrow = active ? (sortDir === "asc" ? " \u25B2" : " \u25BC") : "";
   return (
-    <input
-      type="date"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      style={{ ...styles.input, cursor: "pointer" }}
-    />
+    <div onClick={() => onSort(field)}
+      style={{ ...S.colHeader, ...style, cursor: "pointer", userSelect: "none", color: active ? C.teal : C.grey }}>
+      {label}{arrow}
+    </div>
   );
 }
 
-// ─── DRAGGABLE TASK ROW ────────────────────────────────────────────────────
-function TaskRow({ task, index, projects, onComplete, onDragStart, onDragOver, onDrop }) {
+// ─── TASK ROW ──────────────────────────────────────────────────────────────
+function TaskRow({ task, index, projects, onComplete, onEdit, onDragStart, onDragOver, onDrop }) {
   const project = projects.find((p) => p.id === task.project_id);
-
   return (
-    <div
-      draggable
+    <div draggable
       onDragStart={(e) => onDragStart(e, index)}
       onDragOver={(e) => { e.preventDefault(); onDragOver(e, index); }}
       onDrop={(e) => onDrop(e, index)}
-      style={styles.taskRow}
-      onMouseEnter={(e) => { e.currentTarget.style.background = "#faf8f4"; e.currentTarget.querySelector('.grip').style.opacity = 1; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = "#ffffff"; e.currentTarget.querySelector('.grip').style.opacity = 0.3; }}
+      style={S.taskRow}
+      onMouseEnter={(e) => { e.currentTarget.style.background = C.tealLight; e.currentTarget.querySelector('.grip').style.opacity = 1; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = C.white; e.currentTarget.querySelector('.grip').style.opacity = 0.25; }}
     >
-      <div className="grip" style={styles.grip}>⠿</div>
-      <div style={styles.taskCell}>{project?.name || "—"}</div>
-      <div style={styles.taskCellSmall}>{project?.number || "—"}</div>
-      <div style={styles.taskCell}>{project?.client || "—"}</div>
-      <div style={styles.taskCellSmall}>{task.due_date || "—"}</div>
-      <div style={{ ...styles.taskCell, flex: 2 }}>{task.description}</div>
-      <button onClick={() => onComplete(task.id)} style={styles.completeBtn}>
-        Done
-      </button>
+      <div className="grip" style={S.grip}>{"\u2807"}</div>
+      <div style={S.taskCell}>{project?.name || "\u2014"}</div>
+      <div style={S.taskCellSm}>{project?.number || "\u2014"}</div>
+      <div style={S.taskCell}>{project?.client || "\u2014"}</div>
+      <div style={S.taskCellSm}>{task.due_date || "\u2014"}</div>
+      <div style={{ ...S.taskCell, flex: 2 }}>{task.description}</div>
+      <div style={S.taskActions}>
+        <button onClick={() => onEdit(task)} style={S.editBtn}>Edit</button>
+        <button onClick={() => onComplete(task.id)} style={S.doneBtn}>Done</button>
+      </div>
     </div>
+  );
+}
+
+// ─── MODAL ─────────────────────────────────────────────────────────────────
+function Modal({ title, children, onClose }) {
+  return (
+    <div style={S.overlay} onClick={onClose}>
+      <div style={S.modal} onClick={(e) => e.stopPropagation()}>
+        <div style={S.modalHeader}>
+          <h2 style={S.modalTitle}>{title}</h2>
+          <button onClick={onClose} style={S.modalClose}>{"\u2715"}</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ─── EDIT TASK MODAL ───────────────────────────────────────────────────────
+function EditTaskModal({ task, projects, onSave, onClose }) {
+  const [data, setData] = useState({ ...task });
+  const selProject = projects.find((p) => p.id === data.project_id) || null;
+  return (
+    <Modal title="Edit Task" onClose={onClose}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <SearchableDropdown options={projects} value={selProject}
+          onChange={(p) => setData({ ...data, project_id: p.id })}
+          placeholder="Search project\u2026" displayKey="name" />
+        <input type="date" value={data.due_date || ""} onChange={(e) => setData({ ...data, due_date: e.target.value })} style={{ ...S.input, cursor: "pointer" }} />
+        <input value={data.description} onChange={(e) => setData({ ...data, description: e.target.value })} placeholder="Task description" style={S.input} />
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
+          <button onClick={onClose} style={S.cancelBtn}>Cancel</button>
+          <button onClick={() => onSave(data)} style={S.addBtn}>Save</button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -131,617 +176,300 @@ export default function App() {
   const [page, setPage] = useState("dashboard");
   const [projects, setProjects] = useState([]);
   const [tasks, setTasks] = useState([]);
-  const [filterText, setFilterText] = useState("");
 
-  // New task form
+  // New task
   const [selectedProject, setSelectedProject] = useState(null);
   const [newDate, setNewDate] = useState("");
   const [newDesc, setNewDesc] = useState("");
 
-  // New project form
+  // New project
   const [projName, setProjName] = useState("");
   const [projNumber, setProjNumber] = useState("");
   const [projClient, setProjClient] = useState("");
 
-  // Drag state
+  // Editing
+  const [editingTask, setEditingTask] = useState(null);
+  const [editingProject, setEditingProject] = useState(null);
+
+  // Sort
+  const [taskSort, setTaskSort] = useState({ field: null, dir: "asc" });
+  const [projSort, setProjSort] = useState({ field: null, dir: "asc" });
+
+  // Column filters
+  const [taskFilters, setTaskFilters] = useState({ project: "", number: "", client: "", date: "", description: "" });
+  const [projFilters, setProjFilters] = useState({ name: "", number: "", client: "" });
+
+  // Drag
   const dragItem = useRef(null);
   const dragOverItem = useRef(null);
 
-  // ── Load data ──
   useEffect(() => {
-    if (useDemo) {
-      setProjects([
-        { id: 1, name: "Victoria Quay Landscaping", number: "VQ-2025-001", client: "Human Urban" },
-        { id: 2, name: "Smith Street BTR", number: "SS-2025-002", client: "Perkins Builders" },
-        { id: 3, name: "Cordova Court Residence", number: "CC-2025-003", client: "Thompson Family" },
-      ]);
-      setTasks([
-        { id: 1, project_id: 1, due_date: "2026-03-10", description: "Review Wall A blockwork specification", sort_order: 0 },
-        { id: 2, project_id: 2, due_date: "2026-03-12", description: "Submit PI insurance documentation", sort_order: 1 },
-        { id: 3, project_id: 3, due_date: "2026-03-15", description: "Finalise screw pile design calcs", sort_order: 2 },
-      ]);
-    } else {
-      supabase.from("projects").select("order=name.asc").then(setProjects);
-      supabase.from("tasks").select("order=sort_order.asc").then(setTasks);
-    }
+    supabase.from("projects").select("order=name.asc").then(setProjects);
+    supabase.from("tasks").select("order=sort_order.asc").then(setTasks);
   }, []);
 
-  // ── Add project ──
+  // ── Projects CRUD ──
   const addProject = async () => {
     if (!projName.trim()) return;
-    const newP = { name: projName.trim(), number: projNumber.trim(), client: projClient.trim() };
-    if (useDemo) {
-      const id = Date.now();
-      setProjects((p) => [...p, { ...newP, id }]);
-    } else {
-      const [created] = await supabase.from("projects").insert(newP);
-      setProjects((p) => [...p, created]);
-    }
+    const [created] = await supabase.from("projects").insert({ name: projName.trim(), number: projNumber.trim(), client: projClient.trim() });
+    setProjects((prev) => [...prev, created]);
     setProjName(""); setProjNumber(""); setProjClient("");
   };
 
-  const deleteProject = async (id) => {
-    if (useDemo) {
-      setProjects((p) => p.filter((x) => x.id !== id));
-      setTasks((t) => t.filter((x) => x.project_id !== id));
-    } else {
-      await supabase.from("tasks").delete(`project_id=eq.${id}`);
-      await supabase.from("projects").delete(id);
-      setProjects((p) => p.filter((x) => x.id !== id));
-      setTasks((t) => t.filter((x) => x.project_id !== id));
-    }
+  const updateProject = async (proj) => {
+    const [updated] = await supabase.from("projects").update({ name: proj.name, number: proj.number, client: proj.client }, proj.id);
+    setProjects((prev) => prev.map((p) => (p.id === proj.id ? { ...p, ...updated } : p)));
+    setEditingProject(null);
   };
 
-  // ── Add task ──
+  const deleteProject = async (id) => {
+    await supabase.query("tasks", { method: "DELETE", filters: `?project_id=eq.${id}` });
+    await supabase.from("projects").delete(id);
+    setProjects((p) => p.filter((x) => x.id !== id));
+    setTasks((t) => t.filter((x) => x.project_id !== id));
+  };
+
+  // ── Tasks CRUD ──
   const addTask = async () => {
     if (!selectedProject || !newDesc.trim()) return;
-    const newT = {
-      project_id: selectedProject.id,
-      due_date: newDate || null,
-      description: newDesc.trim(),
-      sort_order: tasks.length,
-    };
-    if (useDemo) {
-      setTasks((t) => [...t, { ...newT, id: Date.now() }]);
-    } else {
-      const [created] = await supabase.from("tasks").insert(newT);
-      setTasks((t) => [...t, created]);
-    }
+    const [created] = await supabase.from("tasks").insert({ project_id: selectedProject.id, due_date: newDate || null, description: newDesc.trim(), sort_order: tasks.length });
+    setTasks((prev) => [...prev, created]);
     setSelectedProject(null); setNewDate(""); setNewDesc("");
   };
 
-  // ── Complete (delete) task ──
+  const updateTask = async (task) => {
+    const [updated] = await supabase.from("tasks").update({ project_id: task.project_id, due_date: task.due_date || null, description: task.description }, task.id);
+    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, ...updated } : t)));
+    setEditingTask(null);
+  };
+
   const completeTask = async (id) => {
-    if (!useDemo) await supabase.from("tasks").delete(id);
+    await supabase.from("tasks").delete(id);
     setTasks((t) => t.filter((x) => x.id !== id));
   };
 
-  // ── Drag & drop ──
-  const onDragStart = (e, index) => { dragItem.current = index; e.dataTransfer.effectAllowed = "move"; };
-  const onDragOver = (e, index) => { dragOverItem.current = index; };
+  // ── Drag ──
+  const onDragStart = (e, i) => { dragItem.current = i; e.dataTransfer.effectAllowed = "move"; };
+  const onDragOver = (e, i) => { dragOverItem.current = i; };
   const onDrop = () => {
     const items = [...tasks];
     const [dragged] = items.splice(dragItem.current, 1);
     items.splice(dragOverItem.current, 0, dragged);
-    const reordered = items.map((t, i) => ({ ...t, sort_order: i }));
-    setTasks(reordered);
-    dragItem.current = null;
-    dragOverItem.current = null;
+    setTasks(items.map((t, i) => ({ ...t, sort_order: i })));
+    dragItem.current = null; dragOverItem.current = null;
   };
 
-  // ── Filter tasks ──
-  const filteredTasks = tasks.filter((t) => {
-    if (!filterText) return true;
-    const p = projects.find((pr) => pr.id === t.project_id);
-    const hay = `${p?.name} ${p?.number} ${p?.client} ${t.description} ${t.due_date}`.toLowerCase();
-    return hay.includes(filterText.toLowerCase());
-  });
+  // ── Sort ──
+  const toggleSort = (setter) => (field) => {
+    setter((prev) => ({ field, dir: prev.field === field && prev.dir === "asc" ? "desc" : "asc" }));
+  };
 
-  // ── Keyboard shortcut: Enter to add ──
-  const handleTaskKeyDown = (e) => { if (e.key === "Enter") addTask(); };
-  const handleProjectKeyDown = (e) => { if (e.key === "Enter") addProject(); };
+  const sortArr = (arr, s, getVal) => {
+    if (!s.field) return arr;
+    const d = s.dir === "asc" ? 1 : -1;
+    return [...arr].sort((a, b) => {
+      const va = (getVal(a, s.field) || "").toString().toLowerCase();
+      const vb = (getVal(b, s.field) || "").toString().toLowerCase();
+      return va < vb ? -d : va > vb ? d : 0;
+    });
+  };
+
+  // ── Filter + sort tasks ──
+  const taskVal = (t, f) => {
+    const p = projects.find((pr) => pr.id === t.project_id);
+    if (f === "project") return p?.name;
+    if (f === "number") return p?.number;
+    if (f === "client") return p?.client;
+    if (f === "date") return t.due_date;
+    if (f === "description") return t.description;
+    return "";
+  };
+
+  const fTasks = tasks.filter((t) => {
+    const p = projects.find((pr) => pr.id === t.project_id);
+    if (taskFilters.project && !(p?.name || "").toLowerCase().includes(taskFilters.project.toLowerCase())) return false;
+    if (taskFilters.number && !(p?.number || "").toLowerCase().includes(taskFilters.number.toLowerCase())) return false;
+    if (taskFilters.client && !(p?.client || "").toLowerCase().includes(taskFilters.client.toLowerCase())) return false;
+    if (taskFilters.date && !(t.due_date || "").includes(taskFilters.date)) return false;
+    if (taskFilters.description && !(t.description || "").toLowerCase().includes(taskFilters.description.toLowerCase())) return false;
+    return true;
+  });
+  const sTasks = sortArr(fTasks, taskSort, taskVal);
+
+  // ── Filter + sort projects ──
+  const fProjs = projects.filter((p) => {
+    if (projFilters.name && !p.name?.toLowerCase().includes(projFilters.name.toLowerCase())) return false;
+    if (projFilters.number && !p.number?.toLowerCase().includes(projFilters.number.toLowerCase())) return false;
+    if (projFilters.client && !p.client?.toLowerCase().includes(projFilters.client.toLowerCase())) return false;
+    return true;
+  });
+  const sProjs = sortArr(fProjs, projSort, (p, f) => p[f] || "");
+
+  const hasTF = Object.values(taskFilters).some(Boolean);
+  const hasPF = Object.values(projFilters).some(Boolean);
 
   return (
-    <div style={styles.shell}>
-      {/* ── BANNER NAV ── */}
-      <nav style={styles.nav}>
-        <div style={styles.navInner}>
-          <div style={styles.logo}>IKB Tasks</div>
-          <div style={styles.navLinks}>
-            <button
-              onClick={() => setPage("dashboard")}
-              style={page === "dashboard" ? styles.navActive : styles.navLink}
-            >
-              Dashboard
-            </button>
-            <button
-              onClick={() => setPage("projects")}
-              style={page === "projects" ? styles.navActive : styles.navLink}
-            >
-              Project Library
-            </button>
+    <div style={S.shell}>
+      {/* NAV */}
+      <nav style={S.nav}>
+        <div style={S.navInner}>
+          <div style={S.logoWrap}>
+            {LOGO_URL ? <img src={LOGO_URL} alt="IKB" style={{ height: 32, marginRight: 10 }} /> : <span style={S.logoText}>IKB</span>}
+            <span style={S.logoSub}>Tasks</span>
+          </div>
+          <div style={S.navLinks}>
+            {["dashboard", "projects"].map((pg) => (
+              <button key={pg} onClick={() => setPage(pg)} style={page === pg ? S.navActive : S.navLink}>
+                {pg === "dashboard" ? "Dashboard" : "Project Library"}
+              </button>
+            ))}
           </div>
         </div>
       </nav>
 
-      <div style={styles.content}>
-        {/* ══════════ DASHBOARD ══════════ */}
+      <div style={S.content}>
+        {/* ═══ DASHBOARD ═══ */}
         {page === "dashboard" && (
           <>
-            <div style={styles.pageHeader}>
-              <h1 style={styles.h1}>Task Board</h1>
-              <input
-                type="text"
-                placeholder="Filter tasks…"
-                value={filterText}
-                onChange={(e) => setFilterText(e.target.value)}
-                style={{ ...styles.input, maxWidth: 260 }}
-              />
+            <h1 style={S.h1}>Task Board</h1>
+            <div style={S.headerRow}>
+              <div style={{ width: 28 }} />
+              <SortHeader label="Project" field="project" style={{ flex: 1 }} sortField={taskSort.field} sortDir={taskSort.dir} onSort={toggleSort(setTaskSort)} />
+              <SortHeader label="Number" field="number" style={{ width: 120 }} sortField={taskSort.field} sortDir={taskSort.dir} onSort={toggleSort(setTaskSort)} />
+              <SortHeader label="Client" field="client" style={{ flex: 1 }} sortField={taskSort.field} sortDir={taskSort.dir} onSort={toggleSort(setTaskSort)} />
+              <SortHeader label="Date" field="date" style={{ width: 120 }} sortField={taskSort.field} sortDir={taskSort.dir} onSort={toggleSort(setTaskSort)} />
+              <SortHeader label="Task" field="description" style={{ flex: 2 }} sortField={taskSort.field} sortDir={taskSort.dir} onSort={toggleSort(setTaskSort)} />
+              <div style={{ width: 110 }} />
             </div>
-
-            {/* Column headers */}
-            <div style={styles.colHeaders}>
-              <div style={{ width: 28 }}></div>
-              <div style={styles.colHeader}>Project</div>
-              <div style={styles.colHeaderSmall}>Number</div>
-              <div style={styles.colHeader}>Client</div>
-              <div style={styles.colHeaderSmall}>Date</div>
-              <div style={{ ...styles.colHeader, flex: 2 }}>Task</div>
-              <div style={{ width: 64 }}></div>
+            <div style={S.filterRow}>
+              <div style={{ width: 28 }} />
+              <div style={{ flex: 1 }}><input placeholder="Filter\u2026" value={taskFilters.project} onChange={(e) => setTaskFilters({ ...taskFilters, project: e.target.value })} style={S.filterInput} /></div>
+              <div style={{ width: 120 }}><input placeholder="Filter\u2026" value={taskFilters.number} onChange={(e) => setTaskFilters({ ...taskFilters, number: e.target.value })} style={S.filterInput} /></div>
+              <div style={{ flex: 1 }}><input placeholder="Filter\u2026" value={taskFilters.client} onChange={(e) => setTaskFilters({ ...taskFilters, client: e.target.value })} style={S.filterInput} /></div>
+              <div style={{ width: 120 }}><input placeholder="Filter\u2026" value={taskFilters.date} onChange={(e) => setTaskFilters({ ...taskFilters, date: e.target.value })} style={S.filterInput} /></div>
+              <div style={{ flex: 2 }}><input placeholder="Filter\u2026" value={taskFilters.description} onChange={(e) => setTaskFilters({ ...taskFilters, description: e.target.value })} style={S.filterInput} /></div>
+              <div style={{ width: 110, textAlign: "center" }}>
+                {hasTF && <button onClick={() => setTaskFilters({ project: "", number: "", client: "", date: "", description: "" })} style={S.clearBtn}>Clear</button>}
+              </div>
             </div>
-
-            {/* Task list */}
-            <div style={styles.taskList}>
-              {filteredTasks.map((t, i) => (
-                <TaskRow
-                  key={t.id}
-                  task={t}
-                  index={i}
-                  projects={projects}
-                  onComplete={completeTask}
-                  onDragStart={onDragStart}
-                  onDragOver={onDragOver}
-                  onDrop={onDrop}
-                />
+            <div style={S.list}>
+              {sTasks.map((t, i) => (
+                <TaskRow key={t.id} task={t} index={i} projects={projects}
+                  onComplete={completeTask} onEdit={setEditingTask}
+                  onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop} />
               ))}
-              {filteredTasks.length === 0 && (
-                <div style={styles.empty}>
-                  {filterText ? "No tasks match your filter" : "No tasks yet — add one below"}
+              {sTasks.length === 0 && <div style={S.empty}>{hasTF ? "No tasks match filters" : "No tasks yet \u2014 add one below"}</div>}
+            </div>
+            <div style={S.newRow}>
+              <div style={{ flex: 1 }}><SearchableDropdown options={projects} value={selectedProject} onChange={setSelectedProject} placeholder="Search project\u2026" displayKey="name" /></div>
+              <div style={{ width: 120 }}><input readOnly value={selectedProject?.number || ""} placeholder="Number" style={{ ...S.input, background: C.bg, color: C.textMuted }} /></div>
+              <div style={{ flex: 1 }}><input readOnly value={selectedProject?.client || ""} placeholder="Client" style={{ ...S.input, background: C.bg, color: C.textMuted }} /></div>
+              <div style={{ width: 140 }}><input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} style={{ ...S.input, cursor: "pointer" }} /></div>
+              <div style={{ flex: 2 }}><input value={newDesc} onChange={(e) => setNewDesc(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addTask(); }} placeholder="Task description\u2026" style={S.input} /></div>
+              <button onClick={addTask} style={S.addBtn}>Add</button>
+            </div>
+            {editingTask && <EditTaskModal task={editingTask} projects={projects} onSave={updateTask} onClose={() => setEditingTask(null)} />}
+          </>
+        )}
+
+        {/* ═══ PROJECT LIBRARY ═══ */}
+        {page === "projects" && (
+          <>
+            <h1 style={S.h1}>Project Library</h1>
+            <div style={S.headerRow}>
+              <SortHeader label="Project Name" field="name" style={{ flex: 2 }} sortField={projSort.field} sortDir={projSort.dir} onSort={toggleSort(setProjSort)} />
+              <SortHeader label="Project Number" field="number" style={{ flex: 1 }} sortField={projSort.field} sortDir={projSort.dir} onSort={toggleSort(setProjSort)} />
+              <SortHeader label="Client" field="client" style={{ flex: 1 }} sortField={projSort.field} sortDir={projSort.dir} onSort={toggleSort(setProjSort)} />
+              <div style={{ width: 90 }} />
+            </div>
+            <div style={S.filterRow}>
+              <div style={{ flex: 2 }}><input placeholder="Filter\u2026" value={projFilters.name} onChange={(e) => setProjFilters({ ...projFilters, name: e.target.value })} style={S.filterInput} /></div>
+              <div style={{ flex: 1 }}><input placeholder="Filter\u2026" value={projFilters.number} onChange={(e) => setProjFilters({ ...projFilters, number: e.target.value })} style={S.filterInput} /></div>
+              <div style={{ flex: 1 }}><input placeholder="Filter\u2026" value={projFilters.client} onChange={(e) => setProjFilters({ ...projFilters, client: e.target.value })} style={S.filterInput} /></div>
+              <div style={{ width: 90, textAlign: "center" }}>
+                {hasPF && <button onClick={() => setProjFilters({ name: "", number: "", client: "" })} style={S.clearBtn}>Clear</button>}
+              </div>
+            </div>
+            <div style={S.list}>
+              {sProjs.map((p) => (
+                <div key={p.id} style={S.taskRow}
+                  onMouseEnter={(e) => e.currentTarget.style.background = C.tealLight}
+                  onMouseLeave={(e) => e.currentTarget.style.background = C.white}>
+                  <div style={{ ...S.taskCell, flex: 2, fontWeight: 600 }}>{p.name}</div>
+                  <div style={S.taskCell}>{p.number}</div>
+                  <div style={S.taskCell}>{p.client}</div>
+                  <div style={S.taskActions}>
+                    <button onClick={() => setEditingProject({ ...p })} style={S.editBtn}>Edit</button>
+                    <button onClick={() => deleteProject(p.id)} style={S.deleteBtn}>{"\u2715"}</button>
+                  </div>
                 </div>
-              )}
+              ))}
+              {sProjs.length === 0 && <div style={S.empty}>{hasPF ? "No projects match filters" : "No projects yet \u2014 add one below"}</div>}
             </div>
-
-            {/* New task entry */}
-            <div style={styles.newRow}>
-              <div style={{ flex: 1 }}>
-                <SearchableDropdown
-                  options={projects}
-                  value={selectedProject}
-                  onChange={(p) => setSelectedProject(p)}
-                  placeholder="Search project…"
-                  displayKey="name"
-                />
-              </div>
-              <div style={{ width: 120 }}>
-                <input
-                  type="text"
-                  readOnly
-                  value={selectedProject?.number || ""}
-                  placeholder="Number"
-                  style={{ ...styles.input, background: "#f7f5f0", color: "#6b6458" }}
-                />
-              </div>
-              <div style={{ flex: 1 }}>
-                <input
-                  type="text"
-                  readOnly
-                  value={selectedProject?.client || ""}
-                  placeholder="Client"
-                  style={{ ...styles.input, background: "#f7f5f0", color: "#6b6458" }}
-                />
-              </div>
-              <div style={{ width: 140 }}>
-                <DatePicker value={newDate} onChange={setNewDate} />
-              </div>
-              <div style={{ flex: 2 }}>
-                <input
-                  type="text"
-                  value={newDesc}
-                  onChange={(e) => setNewDesc(e.target.value)}
-                  onKeyDown={handleTaskKeyDown}
-                  placeholder="Task description…"
-                  style={styles.input}
-                />
-              </div>
-              <button onClick={addTask} style={styles.addBtn}>Add</button>
+            <div style={S.newRow}>
+              <div style={{ flex: 2 }}><input value={projName} onChange={(e) => setProjName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addProject(); }} placeholder="Project name" style={S.input} /></div>
+              <div style={{ flex: 1 }}><input value={projNumber} onChange={(e) => setProjNumber(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addProject(); }} placeholder="Project number" style={S.input} /></div>
+              <div style={{ flex: 1 }}><input value={projClient} onChange={(e) => setProjClient(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addProject(); }} placeholder="Client" style={S.input} /></div>
+              <button onClick={addProject} style={S.addBtn}>Add</button>
             </div>
-
-            {useDemo && (
-              <div style={styles.demoBanner}>
-                Demo mode — connect Supabase to persist data. See setup instructions below.
-              </div>
+            {editingProject && (
+              <Modal title="Edit Project" onClose={() => setEditingProject(null)}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <input value={editingProject.name} onChange={(e) => setEditingProject({ ...editingProject, name: e.target.value })} placeholder="Project name" style={S.input} />
+                  <input value={editingProject.number} onChange={(e) => setEditingProject({ ...editingProject, number: e.target.value })} placeholder="Project number" style={S.input} />
+                  <input value={editingProject.client} onChange={(e) => setEditingProject({ ...editingProject, client: e.target.value })} placeholder="Client" style={S.input} />
+                  <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
+                    <button onClick={() => setEditingProject(null)} style={S.cancelBtn}>Cancel</button>
+                    <button onClick={() => updateProject(editingProject)} style={S.addBtn}>Save</button>
+                  </div>
+                </div>
+              </Modal>
             )}
           </>
         )}
-
-        {/* ══════════ PROJECT LIBRARY ══════════ */}
-        {page === "projects" && (
-          <>
-            <div style={styles.pageHeader}>
-              <h1 style={styles.h1}>Project Library</h1>
-            </div>
-
-            {/* Project table */}
-            <div style={styles.colHeaders}>
-              <div style={{ ...styles.colHeader, flex: 2 }}>Project Name</div>
-              <div style={styles.colHeader}>Project Number</div>
-              <div style={styles.colHeader}>Client</div>
-              <div style={{ width: 64 }}></div>
-            </div>
-
-            <div style={styles.taskList}>
-              {projects.map((p) => (
-                <div key={p.id} style={styles.taskRow}
-                  onMouseEnter={(e) => e.currentTarget.style.background = "#faf8f4"}
-                  onMouseLeave={(e) => e.currentTarget.style.background = "#ffffff"}
-                >
-                  <div style={{ ...styles.taskCell, flex: 2, fontWeight: 600 }}>{p.name}</div>
-                  <div style={styles.taskCell}>{p.number}</div>
-                  <div style={styles.taskCell}>{p.client}</div>
-                  <button onClick={() => deleteProject(p.id)} style={styles.deleteProjBtn}>✕</button>
-                </div>
-              ))}
-              {projects.length === 0 && (
-                <div style={styles.empty}>No projects yet — add one below</div>
-              )}
-            </div>
-
-            {/* New project entry */}
-            <div style={styles.newRow}>
-              <div style={{ flex: 2 }}>
-                <input
-                  type="text"
-                  value={projName}
-                  onChange={(e) => setProjName(e.target.value)}
-                  onKeyDown={handleProjectKeyDown}
-                  placeholder="Project name"
-                  style={styles.input}
-                />
-              </div>
-              <div style={{ flex: 1 }}>
-                <input
-                  type="text"
-                  value={projNumber}
-                  onChange={(e) => setProjNumber(e.target.value)}
-                  onKeyDown={handleProjectKeyDown}
-                  placeholder="Project number"
-                  style={styles.input}
-                />
-              </div>
-              <div style={{ flex: 1 }}>
-                <input
-                  type="text"
-                  value={projClient}
-                  onChange={(e) => setProjClient(e.target.value)}
-                  onKeyDown={handleProjectKeyDown}
-                  placeholder="Client"
-                  style={styles.input}
-                />
-              </div>
-              <button onClick={addProject} style={styles.addBtn}>Add</button>
-            </div>
-          </>
-        )}
       </div>
-
-      {/* ── SETUP GUIDE (only in demo) ── */}
-      {useDemo && (
-        <div style={styles.setupGuide}>
-          <h2 style={{ margin: "0 0 12px", fontSize: 16, fontWeight: 700, color: "#3d3929" }}>Supabase Setup</h2>
-          <p style={{ margin: "0 0 8px", lineHeight: 1.5 }}>
-            1. Create a Supabase project at <strong>supabase.com</strong><br/>
-            2. Run this SQL in the SQL Editor:
-          </p>
-          <pre style={styles.code}>{`create table projects (
-  id bigint generated always as identity primary key,
-  name text not null,
-  number text,
-  client text
-);
-
-create table tasks (
-  id bigint generated always as identity primary key,
-  project_id bigint references projects(id),
-  due_date date,
-  description text not null,
-  sort_order int default 0
-);
-
--- Enable Row Level Security (optional)
-alter table projects enable row level security;
-alter table tasks enable row level security;
-
--- Public read/write policies (tighten for production)
-create policy "public_projects" on projects for all using (true);
-create policy "public_tasks" on tasks for all using (true);`}</pre>
-          <p style={{ margin: "8px 0 0", lineHeight: 1.5 }}>
-            3. Replace <code>SUPABASE_URL</code> and <code>SUPABASE_ANON_KEY</code> at the top of this file with your project values (Settings → API).
-          </p>
-        </div>
-      )}
     </div>
   );
 }
 
 // ─── STYLES ────────────────────────────────────────────────────────────────
-const C = {
-  bg: "#f5f2eb",
-  surface: "#ffffff",
-  border: "#e0dbd0",
-  text: "#3d3929",
-  textMuted: "#8a8474",
-  accent: "#b8860b",
-  accentHover: "#9a7209",
-  navBg: "#3d3929",
-  navText: "#e8e2d4",
-};
-
-const styles = {
-  shell: {
-    fontFamily: "'DM Sans', 'Segoe UI', system-ui, sans-serif",
-    background: C.bg,
-    minHeight: "100vh",
-    color: C.text,
-  },
-  nav: {
-    background: C.navBg,
-    borderBottom: `1px solid ${C.border}`,
-    position: "sticky",
-    top: 0,
-    zIndex: 100,
-  },
-  navInner: {
-    maxWidth: 1200,
-    margin: "0 auto",
-    padding: "0 24px",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    height: 56,
-  },
-  logo: {
-    fontSize: 20,
-    fontWeight: 800,
-    color: C.accent,
-    letterSpacing: "-0.5px",
-  },
+const S = {
+  shell: { fontFamily: "'Poppins', sans-serif", background: C.bg, minHeight: "100vh", color: C.text },
+  nav: { background: C.teal, position: "sticky", top: 0, zIndex: 100, boxShadow: "0 2px 8px rgba(0,0,0,0.12)" },
+  navInner: { maxWidth: 1280, margin: "0 auto", padding: "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 56 },
+  logoWrap: { display: "flex", alignItems: "center", gap: 6 },
+  logoText: { fontSize: 22, fontWeight: 700, color: C.white, letterSpacing: "1px" },
+  logoSub: { fontSize: 16, fontWeight: 300, color: "rgba(255,255,255,0.8)", letterSpacing: "0.5px" },
   navLinks: { display: "flex", gap: 4 },
-  navLink: {
-    background: "none",
-    border: "none",
-    color: C.navText,
-    fontSize: 14,
-    fontWeight: 500,
-    padding: "8px 16px",
-    borderRadius: 6,
-    cursor: "pointer",
-    opacity: 0.7,
-    fontFamily: "inherit",
-  },
-  navActive: {
-    background: "rgba(255,255,255,0.1)",
-    border: "none",
-    color: "#ffffff",
-    fontSize: 14,
-    fontWeight: 600,
-    padding: "8px 16px",
-    borderRadius: 6,
-    cursor: "pointer",
-    fontFamily: "inherit",
-  },
-  content: {
-    maxWidth: 1200,
-    margin: "0 auto",
-    padding: "32px 24px",
-  },
-  pageHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 24,
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  h1: {
-    fontSize: 26,
-    fontWeight: 800,
-    letterSpacing: "-0.5px",
-    margin: 0,
-  },
-  colHeaders: {
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
-    padding: "10px 16px",
-    borderBottom: `2px solid ${C.border}`,
-    marginBottom: 2,
-  },
-  colHeader: {
-    flex: 1,
-    fontSize: 11,
-    fontWeight: 700,
-    textTransform: "uppercase",
-    letterSpacing: "0.8px",
-    color: C.textMuted,
-  },
-  colHeaderSmall: {
-    width: 120,
-    fontSize: 11,
-    fontWeight: 700,
-    textTransform: "uppercase",
-    letterSpacing: "0.8px",
-    color: C.textMuted,
-  },
-  taskList: {
-    background: C.surface,
-    borderRadius: 8,
-    border: `1px solid ${C.border}`,
-    marginBottom: 16,
-    overflow: "hidden",
-  },
-  taskRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
-    padding: "12px 16px",
-    borderBottom: `1px solid ${C.border}`,
-    cursor: "grab",
-    transition: "background 0.15s",
-    background: "#ffffff",
-  },
-  grip: {
-    width: 20,
-    textAlign: "center",
-    fontSize: 16,
-    color: C.textMuted,
-    opacity: 0.3,
-    transition: "opacity 0.15s",
-    userSelect: "none",
-  },
-  taskCell: {
-    flex: 1,
-    fontSize: 14,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
-  taskCellSmall: {
-    width: 120,
-    fontSize: 13,
-    color: C.textMuted,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
-  completeBtn: {
-    width: 56,
-    padding: "6px 0",
-    fontSize: 12,
-    fontWeight: 700,
-    background: "none",
-    border: `1.5px solid ${C.accent}`,
-    color: C.accent,
-    borderRadius: 5,
-    cursor: "pointer",
-    fontFamily: "inherit",
-    transition: "all 0.15s",
-  },
-  deleteProjBtn: {
-    width: 32,
-    height: 32,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: 14,
-    background: "none",
-    border: "none",
-    color: C.textMuted,
-    borderRadius: 4,
-    cursor: "pointer",
-    fontFamily: "inherit",
-  },
-  newRow: {
-    display: "flex",
-    gap: 12,
-    alignItems: "center",
-    background: C.surface,
-    border: `1px solid ${C.border}`,
-    borderRadius: 8,
-    padding: "12px 16px",
-  },
-  input: {
-    width: "100%",
-    padding: "8px 12px",
-    fontSize: 14,
-    border: `1.5px solid ${C.border}`,
-    borderRadius: 6,
-    background: "#ffffff",
-    color: C.text,
-    fontFamily: "inherit",
-    outline: "none",
-    boxSizing: "border-box",
-    transition: "border-color 0.15s",
-  },
-  addBtn: {
-    padding: "8px 20px",
-    fontSize: 14,
-    fontWeight: 700,
-    background: C.accent,
-    color: "#ffffff",
-    border: "none",
-    borderRadius: 6,
-    cursor: "pointer",
-    fontFamily: "inherit",
-    whiteSpace: "nowrap",
-    transition: "background 0.15s",
-  },
-  dropdown: {
-    position: "absolute",
-    top: "100%",
-    left: 0,
-    right: 0,
-    maxHeight: 200,
-    overflowY: "auto",
-    background: "#ffffff",
-    border: `1.5px solid ${C.border}`,
-    borderTop: "none",
-    borderRadius: "0 0 6px 6px",
-    zIndex: 50,
-    boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
-  },
-  dropdownItem: {
-    padding: "8px 12px",
-    fontSize: 14,
-    cursor: "pointer",
-    transition: "background 0.1s",
-  },
-  dropdownEmpty: {
-    padding: "12px",
-    fontSize: 13,
-    color: C.textMuted,
-    textAlign: "center",
-  },
-  empty: {
-    padding: "32px",
-    textAlign: "center",
-    color: C.textMuted,
-    fontSize: 14,
-  },
-  demoBanner: {
-    marginTop: 16,
-    padding: "10px 16px",
-    background: "#fef3cd",
-    border: "1px solid #ffc107",
-    borderRadius: 6,
-    fontSize: 13,
-    color: "#856404",
-    textAlign: "center",
-  },
-  setupGuide: {
-    maxWidth: 1200,
-    margin: "0 auto",
-    padding: "0 24px 48px",
-    fontSize: 14,
-    color: C.text,
-  },
-  code: {
-    background: C.navBg,
-    color: "#e8e2d4",
-    padding: "16px",
-    borderRadius: 8,
-    fontSize: 13,
-    lineHeight: 1.5,
-    overflowX: "auto",
-    whiteSpace: "pre",
-  },
+  navLink: { background: "none", border: "none", color: "rgba(255,255,255,0.7)", fontSize: 14, fontWeight: 500, padding: "8px 16px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit" },
+  navActive: { background: "rgba(255,255,255,0.18)", border: "none", color: C.white, fontSize: 14, fontWeight: 600, padding: "8px 16px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit" },
+  content: { maxWidth: 1280, margin: "0 auto", padding: "28px 24px" },
+  h1: { fontSize: 24, fontWeight: 700, margin: "0 0 20px", color: C.grey },
+  headerRow: { display: "flex", alignItems: "center", gap: 12, padding: "8px 16px", borderBottom: `2px solid ${C.teal}` },
+  colHeader: { flex: 1, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.6px", color: C.grey },
+  filterRow: { display: "flex", alignItems: "center", gap: 12, padding: "6px 16px", background: C.white, borderBottom: `1px solid ${C.border}` },
+  filterInput: { width: "100%", padding: "4px 8px", fontSize: 12, border: `1px solid ${C.border}`, borderRadius: 4, fontFamily: "inherit", outline: "none", boxSizing: "border-box", color: C.text, background: C.white },
+  clearBtn: { background: "none", border: "none", color: C.teal, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", textDecoration: "underline" },
+  list: { background: C.white, borderRadius: "0 0 8px 8px", border: `1px solid ${C.border}`, borderTop: "none", marginBottom: 16, overflow: "hidden" },
+  taskRow: { display: "flex", alignItems: "center", gap: 12, padding: "10px 16px", borderBottom: `1px solid ${C.border}`, cursor: "grab", transition: "background 0.12s", background: C.white },
+  grip: { width: 20, textAlign: "center", fontSize: 18, color: C.textMuted, opacity: 0.25, transition: "opacity 0.15s", userSelect: "none" },
+  taskCell: { flex: 1, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  taskCellSm: { width: 120, fontSize: 12, color: C.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  taskActions: { display: "flex", gap: 6, width: 110, justifyContent: "flex-end" },
+  editBtn: { padding: "5px 12px", fontSize: 12, fontWeight: 600, background: "none", border: `1.5px solid ${C.teal}`, color: C.teal, borderRadius: 4, cursor: "pointer", fontFamily: "inherit" },
+  doneBtn: { padding: "5px 12px", fontSize: 12, fontWeight: 600, background: C.teal, border: `1.5px solid ${C.teal}`, color: C.white, borderRadius: 4, cursor: "pointer", fontFamily: "inherit" },
+  deleteBtn: { width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, background: "none", border: `1.5px solid ${C.danger}`, color: C.danger, borderRadius: 4, cursor: "pointer", fontFamily: "inherit" },
+  addBtn: { padding: "8px 20px", fontSize: 13, fontWeight: 700, background: C.teal, color: C.white, border: "none", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" },
+  cancelBtn: { padding: "8px 20px", fontSize: 13, fontWeight: 500, background: "none", color: C.grey, border: `1.5px solid ${C.border}`, borderRadius: 6, cursor: "pointer", fontFamily: "inherit" },
+  newRow: { display: "flex", gap: 12, alignItems: "center", background: C.white, border: `1px solid ${C.border}`, borderRadius: 8, padding: "12px 16px" },
+  input: { width: "100%", padding: "8px 12px", fontSize: 13, border: `1.5px solid ${C.border}`, borderRadius: 6, background: C.white, color: C.text, fontFamily: "inherit", outline: "none", boxSizing: "border-box" },
+  dropdown: { position: "absolute", top: "100%", left: 0, right: 0, maxHeight: 200, overflowY: "auto", background: C.white, border: `1.5px solid ${C.border}`, borderTop: "none", borderRadius: "0 0 6px 6px", zIndex: 50, boxShadow: "0 8px 24px rgba(0,0,0,0.08)" },
+  dropdownItem: { padding: "8px 12px", fontSize: 13, cursor: "pointer", transition: "background 0.1s" },
+  dropdownEmpty: { padding: "12px", fontSize: 12, color: C.textMuted, textAlign: "center" },
+  empty: { padding: "32px", textAlign: "center", color: C.textMuted, fontSize: 13 },
+  overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 },
+  modal: { background: C.white, borderRadius: 10, padding: "24px 28px", width: 420, maxWidth: "90vw", boxShadow: "0 16px 48px rgba(0,0,0,0.15)" },
+  modalHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
+  modalTitle: { fontSize: 18, fontWeight: 700, color: C.grey, margin: 0 },
+  modalClose: { background: "none", border: "none", fontSize: 18, color: C.textMuted, cursor: "pointer", fontFamily: "inherit" },
 };
