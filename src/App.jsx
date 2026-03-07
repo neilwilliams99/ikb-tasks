@@ -42,7 +42,7 @@ const C = {
 };
 
 // Column widths — shared across headers, filters, rows, new-row
-const COL = { grip: 24, project: "1.7", number: 60, client: "0.67", date: 120, task: "2", actions: 150 };
+const COL = { grip: 24, project: "1.53", number: 77, client: "0.67", date: 120, task: "2", actions: 150 };
 const PCOL = { name: "2", number: "1", client: "1", actions: 90 };
 
 // ─── SEARCHABLE DROPDOWN ───────────────────────────────────────────────────
