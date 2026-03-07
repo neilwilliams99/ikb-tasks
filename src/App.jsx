@@ -39,10 +39,11 @@ const C = {
   bg: "#f4f5f5", text: "#333333", textMuted: "#888888",
   border: "#DEE0E0", danger: "#d9534f",
   holdBg: "#f0f0f0", holdText: "#aaaaaa",
+  priorityBg: "#fdf0ef", priorityText: "#c0392b",
 };
 
 // Column widths — shared across headers, filters, rows, new-row
-const COL = { grip: 24, project: "1.53", number: 77, client: "0.67", date: 120, task: "2", actions: 150 };
+const COL = { grip: 24, project: "1.53", number: 77, client: "0.67", date: 120, task: "2", actions: 195 };
 const PCOL = { name: "2", number: "1", client: "1", actions: 90 };
 
 // ─── SEARCHABLE DROPDOWN ───────────────────────────────────────────────────
@@ -100,11 +101,12 @@ function SortHeader({ label, field, sortField, sortDir, onSort, style }) {
 }
 
 // ─── TASK ROW ──────────────────────────────────────────────────────────────
-function TaskRow({ task, index, projects, onComplete, onEdit, onToggleHold, onDragStart, onDragOver, onDrop }) {
+function TaskRow({ task, index, projects, onComplete, onEdit, onToggleHold, onTogglePriority, onDragStart, onDragOver, onDrop }) {
   const project = projects.find((p) => p.id === task.project_id);
   const hold = task.on_hold;
-  const rowBg = hold ? C.holdBg : C.white;
-  const textColor = hold ? C.holdText : undefined;
+  const priority = task.priority;
+  const rowBg = hold ? C.holdBg : priority ? C.priorityBg : C.white;
+  const textColor = hold ? C.holdText : priority ? C.priorityText : undefined;
 
   return (
     <div draggable
@@ -112,7 +114,7 @@ function TaskRow({ task, index, projects, onComplete, onEdit, onToggleHold, onDr
       onDragOver={(e) => { e.preventDefault(); onDragOver(e, index); }}
       onDrop={(e) => onDrop(e, index)}
       style={{ ...S.row, background: rowBg }}
-      onMouseEnter={(e) => { if (!hold) e.currentTarget.style.background = C.tealLight; e.currentTarget.querySelector('.grip').style.opacity = 1; }}
+      onMouseEnter={(e) => { if (!hold && !priority) e.currentTarget.style.background = C.tealLight; e.currentTarget.querySelector('.grip').style.opacity = 1; }}
       onMouseLeave={(e) => { e.currentTarget.style.background = rowBg; e.currentTarget.querySelector('.grip').style.opacity = 0.25; }}
     >
       <div className="grip" style={{ ...S.cellFixed, width: COL.grip, color: C.textMuted, opacity: 0.25, fontSize: 18, textAlign: "center", cursor: "grab", userSelect: "none", transition: "opacity 0.15s" }}>{"\u2807"}</div>
@@ -122,6 +124,7 @@ function TaskRow({ task, index, projects, onComplete, onEdit, onToggleHold, onDr
       <div style={{ ...S.cellFixed, width: COL.date, color: textColor || C.textMuted }}>{task.due_date || "\u2014"}</div>
       <div style={{ ...S.cellFlex, flex: COL.task, color: textColor }}>{task.description}</div>
       <div style={{ ...S.cellFixed, width: COL.actions, display: "flex", gap: 5, justifyContent: "flex-end" }}>
+        <button onClick={() => onTogglePriority(task)} style={priority ? S.priorityBtnActive : S.priorityBtn}>Priority</button>
         <button onClick={() => onToggleHold(task)} style={hold ? S.holdBtnActive : S.holdBtn}>Hold</button>
         <button onClick={() => onEdit(task)} style={S.editBtn}>Edit</button>
         <button onClick={() => onComplete(task.id)} style={S.doneBtn}>Done</button>
@@ -236,6 +239,11 @@ export default function App() {
     const newVal = !task.on_hold;
     await supabase.from("tasks").update({ on_hold: newVal }, task.id);
     setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, on_hold: newVal } : t)));
+  };
+  const togglePriority = async (task) => {
+    const newVal = !task.priority;
+    await supabase.from("tasks").update({ priority: newVal }, task.id);
+    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, priority: newVal } : t)));
   };
 
   // Drag
@@ -361,7 +369,7 @@ export default function App() {
             <div style={S.list}>
               {sTasks.map((t, i) => (
                 <TaskRow key={t.id} task={t} index={i} projects={projects}
-                  onComplete={completeTask} onEdit={setEditingTask} onToggleHold={toggleHold}
+                  onComplete={completeTask} onEdit={setEditingTask} onToggleHold={toggleHold} onTogglePriority={togglePriority}
                   onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop} />
               ))}
               {sTasks.length === 0 && <div style={S.empty}>{hasTF ? "No tasks match filters" : "No tasks yet"}</div>}
@@ -469,6 +477,8 @@ const S = {
   doneBtn: { padding: "4px 10px", fontSize: 11, fontWeight: 600, background: C.teal, border: `1.5px solid ${C.teal}`, color: C.white, borderRadius: 4, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" },
   holdBtn: { padding: "4px 8px", fontSize: 11, fontWeight: 600, background: "none", border: `1.5px solid ${C.textMuted}`, color: C.textMuted, borderRadius: 4, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" },
   holdBtnActive: { padding: "4px 8px", fontSize: 11, fontWeight: 600, background: C.textMuted, border: `1.5px solid ${C.textMuted}`, color: C.white, borderRadius: 4, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" },
+  priorityBtn: { padding: "4px 8px", fontSize: 11, fontWeight: 600, background: "none", border: `1.5px solid ${C.danger}`, color: C.danger, borderRadius: 4, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" },
+  priorityBtnActive: { padding: "4px 8px", fontSize: 11, fontWeight: 600, background: C.danger, border: `1.5px solid ${C.danger}`, color: C.white, borderRadius: 4, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" },
   deleteBtn: { width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, background: "none", border: `1.5px solid ${C.danger}`, color: C.danger, borderRadius: 4, cursor: "pointer", fontFamily: "inherit" },
   addBtn: { padding: "8px 20px", fontSize: 13, fontWeight: 700, background: C.teal, color: C.white, border: "none", borderRadius: 6, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" },
   cancelBtn: { padding: "8px 20px", fontSize: 13, fontWeight: 500, background: "none", color: C.grey, border: `1.5px solid ${C.border}`, borderRadius: 6, cursor: "pointer", fontFamily: "inherit" },
