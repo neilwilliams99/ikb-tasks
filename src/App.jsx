@@ -320,6 +320,19 @@ export default function App() {
           <>
             <h1 style={S.h1}>Task Board</h1>
 
+            {/* New task entry */}
+            <div style={{ ...S.row, marginBottom: 16, borderRadius: 8, border: `1px solid ${C.border}` }}>
+              <div style={{ ...S.cellFixed, width: COL.grip }} />
+              <div style={{ flex: COL.project }}><SearchableDropdown options={projects} value={selectedProject} onChange={setSelectedProject} placeholder="Search project" displayKey="name" /></div>
+              <div style={{ ...S.cellFixed, width: COL.number }}><input readOnly value={selectedProject?.number || ""} placeholder="Number" style={{ ...S.input, background: C.bg, color: C.textMuted }} /></div>
+              <div style={{ flex: COL.client }}><input readOnly value={selectedProject?.client || ""} placeholder="Client" style={{ ...S.input, background: C.bg, color: C.textMuted }} /></div>
+              <div style={{ ...S.cellFixed, width: COL.date }}><input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} style={{ ...S.input, cursor: "pointer" }} /></div>
+              <div style={{ flex: COL.task }}><input value={newDesc} onChange={(e) => setNewDesc(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addTask(); }} placeholder="Task description" style={S.input} /></div>
+              <div style={{ ...S.cellFixed, width: COL.actions, display: "flex", justifyContent: "flex-end" }}>
+                <button onClick={addTask} style={S.addBtn}>Add</button>
+              </div>
+            </div>
+
             {/* Header row */}
             <div style={S.row}>
               <div style={{ ...S.cellFixed, width: COL.grip }} />
@@ -354,19 +367,6 @@ export default function App() {
               {sTasks.length === 0 && <div style={S.empty}>{hasTF ? "No tasks match filters" : "No tasks yet"}</div>}
             </div>
 
-            {/* New task row */}
-            <div style={S.row}>
-              <div style={{ ...S.cellFixed, width: COL.grip }} />
-              <div style={{ flex: COL.project }}><SearchableDropdown options={projects} value={selectedProject} onChange={setSelectedProject} placeholder="Search project" displayKey="name" /></div>
-              <div style={{ ...S.cellFixed, width: COL.number }}><input readOnly value={selectedProject?.number || ""} placeholder="Number" style={{ ...S.input, background: C.bg, color: C.textMuted }} /></div>
-              <div style={{ flex: COL.client }}><input readOnly value={selectedProject?.client || ""} placeholder="Client" style={{ ...S.input, background: C.bg, color: C.textMuted }} /></div>
-              <div style={{ ...S.cellFixed, width: COL.date }}><input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} style={{ ...S.input, cursor: "pointer" }} /></div>
-              <div style={{ flex: COL.task }}><input value={newDesc} onChange={(e) => setNewDesc(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addTask(); }} placeholder="Task description" style={S.input} /></div>
-              <div style={{ ...S.cellFixed, width: COL.actions, display: "flex", justifyContent: "flex-end" }}>
-                <button onClick={addTask} style={S.addBtn}>Add</button>
-              </div>
-            </div>
-
             {editingTask && <EditTaskModal task={editingTask} projects={projects} onSave={updateTask} onClose={() => setEditingTask(null)} />}
           </>
         )}
@@ -375,6 +375,16 @@ export default function App() {
         {page === "projects" && (
           <>
             <h1 style={S.h1}>Project Library</h1>
+
+            {/* New project entry */}
+            <div style={{ ...S.row, marginBottom: 16, borderRadius: 8, border: `1px solid ${C.border}` }}>
+              <div style={{ flex: PCOL.name }}><input value={projName} onChange={(e) => setProjName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addProject(); }} placeholder="Project name" style={S.input} /></div>
+              <div style={{ flex: PCOL.number }}><input value={projNumber} onChange={(e) => setProjNumber(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addProject(); }} placeholder="Project number" style={S.input} /></div>
+              <div style={{ flex: PCOL.client }}><input value={projClient} onChange={(e) => setProjClient(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addProject(); }} placeholder="Client" style={S.input} /></div>
+              <div style={{ ...S.cellFixed, width: parseInt(PCOL.actions), display: "flex", justifyContent: "flex-end" }}>
+                <button onClick={addProject} style={S.addBtn}>Add</button>
+              </div>
+            </div>
 
             <div style={S.row}>
               <SortHeader label="Project Name" field="name" style={{ flex: PCOL.name }} sortField={projSort.field} sortDir={projSort.dir} onSort={toggleSort(setProjSort)} />
@@ -407,15 +417,6 @@ export default function App() {
                 </div>
               ))}
               {sProjs.length === 0 && <div style={S.empty}>{hasPF ? "No projects match filters" : "No projects yet"}</div>}
-            </div>
-
-            <div style={S.row}>
-              <div style={{ flex: PCOL.name }}><input value={projName} onChange={(e) => setProjName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addProject(); }} placeholder="Project name" style={S.input} /></div>
-              <div style={{ flex: PCOL.number }}><input value={projNumber} onChange={(e) => setProjNumber(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addProject(); }} placeholder="Project number" style={S.input} /></div>
-              <div style={{ flex: PCOL.client }}><input value={projClient} onChange={(e) => setProjClient(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addProject(); }} placeholder="Client" style={S.input} /></div>
-              <div style={{ ...S.cellFixed, width: parseInt(PCOL.actions), display: "flex", justifyContent: "flex-end" }}>
-                <button onClick={addProject} style={S.addBtn}>Add</button>
-              </div>
             </div>
 
             {editingProject && (
