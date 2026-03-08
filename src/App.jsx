@@ -101,7 +101,7 @@ function SortHeader({ label, field, sortField, sortDir, onSort, style }) {
 }
 
 // ─── TASK ROW ──────────────────────────────────────────────────────────────
-function TaskRow({ task, index, projects, onComplete, onEdit, onToggleHold, onTogglePriority, onDragStart, onDragOver, onDrop }) {
+function TaskRow({ task, index, projects, onComplete, onEdit, onToggleHold, onTogglePriority, onOpenNotes, noteCount, onDragStart, onDragOver, onDrop }) {
   const project = projects.find((p) => p.id === task.project_id);
   const hold = task.on_hold;
   const priority = task.priority;
@@ -122,7 +122,13 @@ function TaskRow({ task, index, projects, onComplete, onEdit, onToggleHold, onTo
       <div style={{ ...S.cellFixed, width: COL.number, color: textColor || C.textMuted }}>{project?.number || "\u2014"}</div>
       <div style={{ ...S.cellFlex, flex: COL.client, color: textColor }}>{project?.client || "\u2014"}</div>
       <div style={{ ...S.cellFixed, width: COL.date, color: textColor || C.textMuted }}>{task.due_date || "\u2014"}</div>
-      <div style={{ ...S.cellFlex, flex: COL.task, color: textColor }}>{task.description}</div>
+      <div
+        onClick={() => onOpenNotes(task)}
+        style={{ ...S.cellFlex, flex: COL.task, color: textColor, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
+      >
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{task.description}</span>
+        {noteCount > 0 && <span style={{ fontSize: 10, background: C.teal, color: C.white, borderRadius: 10, padding: "1px 6px", fontWeight: 700, flexShrink: 0 }}>{noteCount}</span>}
+      </div>
       <div style={{ ...S.cellFixed, width: COL.actions, display: "flex", gap: 5, justifyContent: "flex-end" }}>
         <button onClick={() => onTogglePriority(task)} style={priority ? S.priorityBtnActive : S.priorityBtn}>Priority</button>
         <button onClick={() => onToggleHold(task)} style={hold ? S.holdBtnActive : S.holdBtn}>Hold</button>
@@ -169,6 +175,46 @@ function EditTaskModal({ task, projects, onSave, onClose }) {
   );
 }
 
+// ─── STATUS NOTES MODAL ────────────────────────────────────────────────────
+function StatusNotesModal({ task, notes, onAddNote, onToggleNote, onDeleteNote, onClose }) {
+  const [text, setText] = useState("");
+  const inputRef = useRef(null);
+
+  useEffect(() => { if (inputRef.current) inputRef.current.focus(); }, []);
+
+  const handleAdd = () => {
+    if (!text.trim()) return;
+    onAddNote(text.trim());
+    setText("");
+  };
+
+  return (
+    <Modal title={task.description} onClose={onClose}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        <input ref={inputRef} value={text} onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); }}
+          placeholder="Add a status note" style={{ ...S.input, flex: 1 }} />
+        <button onClick={handleAdd} style={S.addBtn}>Add</button>
+      </div>
+      <div style={{ maxHeight: 320, overflowY: "auto" }}>
+        {notes.length === 0 && <div style={{ color: C.textMuted, fontSize: 13, textAlign: "center", padding: 16 }}>No notes yet</div>}
+        {notes.map((n) => (
+          <div key={n.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
+            <input type="checkbox" checked={n.checked} onChange={() => onToggleNote(n)}
+              style={{ width: 16, height: 16, accentColor: C.teal, cursor: "pointer", flexShrink: 0 }} />
+            <span style={{
+              flex: 1, fontSize: 13, color: n.checked ? C.textMuted : C.text,
+              textDecoration: n.checked ? "line-through" : "none",
+            }}>{n.text}</span>
+            <button onClick={() => onDeleteNote(n.id)}
+              style={{ background: "none", border: "none", color: C.textMuted, fontSize: 14, cursor: "pointer", fontFamily: "inherit", padding: "2px 6px" }}>{"\u2715"}</button>
+          </div>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
 // ─── MAIN APP ──────────────────────────────────────────────────────────────
 export default function App() {
   const [page, setPage] = useState("dashboard");
@@ -185,6 +231,8 @@ export default function App() {
 
   const [editingTask, setEditingTask] = useState(null);
   const [editingProject, setEditingProject] = useState(null);
+  const [statusTask, setStatusTask] = useState(null);
+  const [taskNotes, setTaskNotes] = useState([]);
 
   const [taskSort, setTaskSort] = useState({ field: null, dir: "asc" });
   const [projSort, setProjSort] = useState({ field: null, dir: "asc" });
@@ -195,10 +243,40 @@ export default function App() {
   const dragItem = useRef(null);
   const dragOverItem = useRef(null);
 
+  const [allNotes, setAllNotes] = useState([]);
+
   useEffect(() => {
     supabase.from("projects").select("order=name.asc").then(setProjects);
     supabase.from("tasks").select("order=sort_order.asc").then(setTasks);
+    supabase.from("task_notes").select("order=created_at.asc").then((data) => { if (Array.isArray(data)) setAllNotes(data); });
   }, []);
+
+  // Note counts per task
+  const noteCountMap = {};
+  allNotes.forEach((n) => { noteCountMap[n.task_id] = (noteCountMap[n.task_id] || 0) + 1; });
+
+  // Open notes modal
+  const openNotes = async (task) => {
+    setStatusTask(task);
+    const notes = await supabase.from("task_notes").select(`task_id=eq.${task.id}&order=created_at.asc`);
+    setTaskNotes(Array.isArray(notes) ? notes : []);
+  };
+  const addNote = async (text) => {
+    const [created] = await supabase.from("task_notes").insert({ task_id: statusTask.id, text, checked: false });
+    setTaskNotes((prev) => [...prev, created]);
+    setAllNotes((prev) => [...prev, created]);
+  };
+  const toggleNote = async (note) => {
+    const newVal = !note.checked;
+    await supabase.from("task_notes").update({ checked: newVal }, note.id);
+    setTaskNotes((prev) => prev.map((n) => (n.id === note.id ? { ...n, checked: newVal } : n)));
+    setAllNotes((prev) => prev.map((n) => (n.id === note.id ? { ...n, checked: newVal } : n)));
+  };
+  const deleteNote = async (id) => {
+    await supabase.from("task_notes").delete(id);
+    setTaskNotes((prev) => prev.filter((n) => n.id !== id));
+    setAllNotes((prev) => prev.filter((n) => n.id !== id));
+  };
 
   // Projects CRUD
   const addProject = async () => {
@@ -232,8 +310,10 @@ export default function App() {
     setEditingTask(null);
   };
   const completeTask = async (id) => {
+    await supabase.query("task_notes", { method: "DELETE", filters: `?task_id=eq.${id}` });
     await supabase.from("tasks").delete(id);
     setTasks((t) => t.filter((x) => x.id !== id));
+    setAllNotes((prev) => prev.filter((n) => n.task_id !== id));
   };
   const toggleHold = async (task) => {
     const newVal = !task.on_hold;
@@ -370,12 +450,14 @@ export default function App() {
               {sTasks.map((t, i) => (
                 <TaskRow key={t.id} task={t} index={i} projects={projects}
                   onComplete={completeTask} onEdit={setEditingTask} onToggleHold={toggleHold} onTogglePriority={togglePriority}
+                  onOpenNotes={openNotes} noteCount={noteCountMap[t.id] || 0}
                   onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop} />
               ))}
               {sTasks.length === 0 && <div style={S.empty}>{hasTF ? "No tasks match filters" : "No tasks yet"}</div>}
             </div>
 
             {editingTask && <EditTaskModal task={editingTask} projects={projects} onSave={updateTask} onClose={() => setEditingTask(null)} />}
+            {statusTask && <StatusNotesModal task={statusTask} notes={taskNotes} onAddNote={addNote} onToggleNote={toggleNote} onDeleteNote={deleteNote} onClose={() => setStatusTask(null)} />}
           </>
         )}
 
