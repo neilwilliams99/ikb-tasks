@@ -44,9 +44,11 @@ export default function Reports({ supabase, projects, S }) {
       subject: "",
       ref_docs: [""],
       caveats: [...DEFAULT_CAVEATS],
-      item1_text: "Pre-pour inspection is limited to checking the formwork has been installed generally in accordance with the reference documents.",
-      item2_text: "Inspection was undertaken in person.",
-      item3_text: "Refer to comments on page 2.",
+      items: [
+        { text: "Pre-pour inspection is limited to checking the formwork has been installed generally in accordance with the reference documents." },
+        { text: "Inspection was undertaken in person." },
+        { text: "Amendments required on site prior to Pour (refer IKB Engineering mark-up):\nRefer to comments on page 2." },
+      ],
       image: null,
       imagePreview: null,
     };
@@ -68,6 +70,7 @@ export default function Reports({ supabase, projects, S }) {
       project_id: proj.id,
       to_company: proj.client || "",
       project_name: proj.name || "",
+      ikb_reference: f.ikb_reference || proj.number || "",
     }));
   };
 
@@ -129,9 +132,7 @@ export default function Reports({ supabase, projects, S }) {
       subject: form.subject,
       ref_docs: JSON.stringify(form.ref_docs),
       caveats: JSON.stringify(form.caveats),
-      item1_text: form.item1_text,
-      item2_text: form.item2_text,
-      item3_text: form.item3_text,
+      items: JSON.stringify(form.items),
       image_data: form.image || null,
     };
 
@@ -158,9 +159,11 @@ export default function Reports({ supabase, projects, S }) {
       subject: r.subject || "",
       ref_docs: safeJson(r.ref_docs, [""]),
       caveats: safeJson(r.caveats, [...DEFAULT_CAVEATS]),
-      item1_text: r.item1_text || "",
-      item2_text: r.item2_text || "",
-      item3_text: r.item3_text || "",
+      items: safeJson(r.items, safeJson(r.item1_text ? JSON.stringify([
+        { text: r.item1_text },
+        { text: r.item2_text },
+        { text: "Amendments required on site prior to Pour (refer IKB Engineering mark-up):\n" + r.item3_text },
+      ]) : null, [{ text: "" }])),
       image: r.image_data || null,
       imagePreview: r.image_data || null,
     });
@@ -193,7 +196,7 @@ export default function Reports({ supabase, projects, S }) {
 
       // ── Page 1 ──
       drawHeader(doc, ml, mr, pw);
-      let y = 55;
+      let y = 58;
 
       // Title
       doc.setFont("helvetica", "bold");
@@ -284,20 +287,23 @@ export default function Reports({ supabase, projects, S }) {
       y = cellY + cellH;
 
       // Numbered items
-      const items = [
-        ["1", rd.item1_text],
-        ["2", rd.item2_text],
-        ["3", "Amendments required on site prior to Pour (refer IKB Engineering mark-up):\n" + rd.item3_text],
+      const items = typeof rd.items === "string" ? safeJson(rd.items, []) : (rd.items || []);
+      // Backward compat: if old format with item1_text etc
+      const itemList = items.length > 0 ? items : [
+        { text: rd.item1_text || "" },
+        { text: rd.item2_text || "" },
+        { text: "Amendments required on site prior to Pour (refer IKB Engineering mark-up):\n" + (rd.item3_text || "") },
       ];
 
-      items.forEach(([num, txt]) => {
+      itemList.forEach((item, idx) => {
+        const txt = item.text || "";
         const lines = doc.splitTextToSize(txt, commColW - 6);
         const rowH = Math.max(8, lines.length * 4 + 4);
 
         if (y + rowH > ph - 35) { addNewPage(doc, ml, mr, pw); y = 55; }
 
         doc.setFont("helvetica", "bold");
-        doc.text(num, ml + 5, y + 5);
+        doc.text(String(idx + 1), ml + 5, y + 5);
         doc.setFont("helvetica", "normal");
         let ly = y + 5;
         lines.forEach((line) => {
@@ -321,10 +327,10 @@ export default function Reports({ supabase, projects, S }) {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(20);
         doc.setTextColor(51, 51, 51);
-        doc.text("RECORD OF INSPECTION", ml, 55);
+        doc.text("RECORD OF INSPECTION", ml, 58);
 
         // Fit image in remaining space
-        const imgY = 65;
+        const imgY = 68;
         const maxH = ph - imgY - 30;
         const maxW = contentW;
 
@@ -417,10 +423,6 @@ export default function Reports({ supabase, projects, S }) {
                 <input value={form.issued_by} onChange={(e) => updateField("issued_by", e.target.value)} style={S.input} />
               </div>
               <div>
-                <label style={sty.label}>Project Name</label>
-                <input value={form.project_name} onChange={(e) => updateField("project_name", e.target.value)} style={S.input} />
-              </div>
-              <div>
                 <label style={sty.label}>Subject</label>
                 <input value={form.subject} onChange={(e) => updateField("subject", e.target.value)} style={S.input} />
               </div>
@@ -453,21 +455,23 @@ export default function Reports({ supabase, projects, S }) {
 
           <div style={sty.card}>
             <h2 style={sty.section}>Inspection Items</h2>
-            <div style={{ marginBottom: 12 }}>
-              <label style={sty.label}>Item 1</label>
-              <textarea value={form.item1_text} onChange={(e) => updateField("item1_text", e.target.value)}
-                rows={2} style={{ ...S.input, resize: "vertical", lineHeight: 1.5 }} />
-            </div>
-            <div style={{ marginBottom: 12 }}>
-              <label style={sty.label}>Item 2</label>
-              <textarea value={form.item2_text} onChange={(e) => updateField("item2_text", e.target.value)}
-                rows={2} style={{ ...S.input, resize: "vertical", lineHeight: 1.5 }} />
-            </div>
-            <div>
-              <label style={sty.label}>Item 3 (Amendments comment)</label>
-              <textarea value={form.item3_text} onChange={(e) => updateField("item3_text", e.target.value)}
-                rows={2} style={{ ...S.input, resize: "vertical", lineHeight: 1.5 }} />
-            </div>
+            {form.items.map((item, i) => (
+              <div key={i} style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "flex-start" }}>
+                <div style={{ width: 32, paddingTop: 8, fontWeight: 700, fontSize: 13, color: C.grey, textAlign: "center", flexShrink: 0 }}>{i + 1}</div>
+                <textarea value={item.text} onChange={(e) => {
+                  const newItems = [...form.items];
+                  newItems[i] = { text: e.target.value };
+                  setForm((f) => ({ ...f, items: newItems }));
+                }} rows={2} style={{ ...S.input, flex: 1, resize: "vertical", lineHeight: 1.5 }} />
+                {form.items.length > 1 && (
+                  <button onClick={() => {
+                    const newItems = form.items.filter((_, idx) => idx !== i);
+                    setForm((f) => ({ ...f, items: newItems }));
+                  }} style={{ ...S.deleteBtn, width: 32, height: 32, marginTop: 4 }}>{"\u2715"}</button>
+                )}
+              </div>
+            ))}
+            <button onClick={() => setForm((f) => ({ ...f, items: [...f.items, { text: "" }] }))} style={{ ...S.editBtn, marginTop: 4 }}>+ Add Item</button>
           </div>
 
           <div style={sty.card}>
@@ -507,7 +511,7 @@ function formatDate(d) {
 
 function drawHeader(doc, ml, mr, pw) {
   try {
-    doc.addImage(LOGO_BASE64, "PNG", ml, 8, 40, 24);
+    doc.addImage(LOGO_BASE64, "PNG", ml, 6, 50, 30);
   } catch { /* logo failed */ }
 
   doc.setFont("helvetica", "normal");
