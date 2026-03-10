@@ -45,6 +45,7 @@ const C = {
 // Column widths — shared across headers, filters, rows, new-row
 const COL = { grip: 24, project: "1.53", number: 77, client: "0.67", date: 120, task: "2", actions: 195 };
 const PCOL = { name: "2", number: "1", client: "1", actions: 90 };
+const TCOL = { project: "1.2", number: 70, client: "0.6", date: 100, desc: "1.5", units: 60, rate: 60, total: 70, actions: 80 };
 
 // ─── SEARCHABLE DROPDOWN ───────────────────────────────────────────────────
 function SearchableDropdown({ options, value, onChange, placeholder, displayKey, style: extraStyle }) {
@@ -240,6 +241,17 @@ export default function App() {
   const [taskFilters, setTaskFilters] = useState({ project: "", number: "", client: "", date: "", description: "" });
   const [projFilters, setProjFilters] = useState({ name: "", number: "", client: "" });
 
+  // Timesheet
+  const [tsEntries, setTsEntries] = useState([]);
+  const [tsSort, setTsSort] = useState({ field: null, dir: "asc" });
+  const [tsFilters, setTsFilters] = useState({ project: "", number: "", client: "", date: "", description: "" });
+  const [tsProject, setTsProject] = useState(null);
+  const [tsDate, setTsDate] = useState("");
+  const [tsDesc, setTsDesc] = useState("");
+  const [tsUnits, setTsUnits] = useState("");
+  const [tsRate, setTsRate] = useState("");
+  const [editingTs, setEditingTs] = useState(null);
+
   const dragItem = useRef(null);
   const dragOverItem = useRef(null);
 
@@ -248,6 +260,7 @@ export default function App() {
   useEffect(() => {
     supabase.from("projects").select("order=name.asc").then(setProjects);
     supabase.from("tasks").select("order=sort_order.asc").then(setTasks);
+    supabase.from("timesheet").select("order=date.desc").then((data) => { if (Array.isArray(data)) setTsEntries(data); });
     supabase.from("task_notes").select("order=created_at.asc").then((data) => { if (Array.isArray(data)) setAllNotes(data); });
   }, []);
 
@@ -326,6 +339,24 @@ export default function App() {
     setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, priority: newVal } : t)));
   };
 
+  // Timesheet CRUD
+  const addTsEntry = async () => {
+    if (!tsProject || !tsDesc.trim()) return;
+    const entry = { project_id: tsProject.id, date: tsDate || null, description: tsDesc.trim(), units: parseFloat(tsUnits) || 0, rate: parseFloat(tsRate) || 0 };
+    const [created] = await supabase.from("timesheet").insert(entry);
+    setTsEntries((prev) => [created, ...prev]);
+    setTsProject(null); setTsDate(""); setTsDesc(""); setTsUnits(""); setTsRate("");
+  };
+  const updateTsEntry = async (entry) => {
+    const [updated] = await supabase.from("timesheet").update({ project_id: entry.project_id, date: entry.date || null, description: entry.description, units: parseFloat(entry.units) || 0, rate: parseFloat(entry.rate) || 0 }, entry.id);
+    setTsEntries((prev) => prev.map((e) => (e.id === entry.id ? { ...e, ...updated } : e)));
+    setEditingTs(null);
+  };
+  const deleteTsEntry = async (id) => {
+    await supabase.from("timesheet").delete(id);
+    setTsEntries((prev) => prev.filter((e) => e.id !== id));
+  };
+
   // Drag
   const onDragStart = (e, i) => { dragItem.current = i; e.dataTransfer.effectAllowed = "move"; };
   const onDragOver = (e, i) => { dragOverItem.current = i; };
@@ -383,6 +414,32 @@ export default function App() {
 
   const hasTF = Object.values(taskFilters).some(Boolean);
   const hasPF = Object.values(projFilters).some(Boolean);
+  const hasTsF = Object.values(tsFilters).some(Boolean);
+
+  // Filter + sort timesheet
+  const tsVal = (e, f) => {
+    const p = projects.find((pr) => pr.id === e.project_id);
+    if (f === "project") return p?.name;
+    if (f === "number") return p?.number;
+    if (f === "client") return p?.client;
+    if (f === "date") return e.date;
+    if (f === "description") return e.description;
+    if (f === "units") return e.units;
+    if (f === "rate") return e.rate;
+    if (f === "total") return (e.units || 0) * (e.rate || 0);
+    return "";
+  };
+  const fTs = tsEntries.filter((e) => {
+    const p = projects.find((pr) => pr.id === e.project_id);
+    if (tsFilters.project && !(p?.name || "").toLowerCase().includes(tsFilters.project.toLowerCase())) return false;
+    if (tsFilters.number && !(p?.number || "").toLowerCase().includes(tsFilters.number.toLowerCase())) return false;
+    if (tsFilters.client && !(p?.client || "").toLowerCase().includes(tsFilters.client.toLowerCase())) return false;
+    if (tsFilters.date && !(e.date || "").includes(tsFilters.date)) return false;
+    if (tsFilters.description && !(e.description || "").toLowerCase().includes(tsFilters.description.toLowerCase())) return false;
+    return true;
+  });
+  const sTs = sortArr(fTs, tsSort, tsVal);
+  const tsTotal = sTs.reduce((sum, e) => sum + (e.units || 0) * (e.rate || 0), 0);
 
   return (
     <div style={S.shell}>
@@ -393,9 +450,9 @@ export default function App() {
             <span style={S.logoSub}>Tasks</span>
           </div>
           <div style={S.navLinks}>
-            {["dashboard", "projects"].map((pg) => (
+            {[["dashboard", "Task Board"], ["timesheet", "Time Sheet"], ["projects", "Project Library"]].map(([pg, label]) => (
               <button key={pg} onClick={() => setPage(pg)} style={page === pg ? S.navActive : S.navLink}>
-                {pg === "dashboard" ? "Dashboard" : "Project Library"}
+                {label}
               </button>
             ))}
           </div>
@@ -458,6 +515,127 @@ export default function App() {
 
             {editingTask && <EditTaskModal task={editingTask} projects={projects} onSave={updateTask} onClose={() => setEditingTask(null)} />}
             {statusTask && <StatusNotesModal task={statusTask} notes={taskNotes} onAddNote={addNote} onToggleNote={toggleNote} onDeleteNote={deleteNote} onClose={() => setStatusTask(null)} />}
+          </>
+        )}
+
+        {/* ═══ TIME SHEET ═══ */}
+        {page === "timesheet" && (
+          <>
+            <h1 style={S.h1}>Time Sheet</h1>
+
+            {/* New entry */}
+            <div style={{ ...S.row, marginBottom: 16, borderRadius: 8, border: `1px solid ${C.border}` }}>
+              <div style={{ flex: TCOL.project }}><SearchableDropdown options={projects} value={tsProject} onChange={setTsProject} placeholder="Search project" displayKey="name" /></div>
+              <div style={{ ...S.cellFixed, width: TCOL.number }}><input readOnly value={tsProject?.number || ""} placeholder="No." style={{ ...S.input, background: C.bg, color: C.textMuted }} /></div>
+              <div style={{ flex: TCOL.client }}><input readOnly value={tsProject?.client || ""} placeholder="Client" style={{ ...S.input, background: C.bg, color: C.textMuted }} /></div>
+              <div style={{ ...S.cellFixed, width: TCOL.date }}><input type="date" value={tsDate} onChange={(e) => setTsDate(e.target.value)} style={{ ...S.input, cursor: "pointer" }} /></div>
+              <div style={{ flex: TCOL.desc }}><input value={tsDesc} onChange={(e) => setTsDesc(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") addTsEntry(); }} placeholder="Description" style={S.input} /></div>
+              <div style={{ ...S.cellFixed, width: TCOL.units }}><input type="number" step="0.25" value={tsUnits} onChange={(e) => setTsUnits(e.target.value)} placeholder="Hrs" style={{ ...S.input, textAlign: "right" }} /></div>
+              <div style={{ ...S.cellFixed, width: TCOL.rate }}><input type="number" value={tsRate} onChange={(e) => setTsRate(e.target.value)} placeholder="Rate" style={{ ...S.input, textAlign: "right" }} /></div>
+              <div style={{ ...S.cellFixed, width: TCOL.total, fontSize: 13, fontWeight: 600, textAlign: "right", color: C.teal }}>
+                ${((parseFloat(tsUnits) || 0) * (parseFloat(tsRate) || 0)).toFixed(2)}
+              </div>
+              <div style={{ ...S.cellFixed, width: TCOL.actions, display: "flex", justifyContent: "flex-end" }}>
+                <button onClick={addTsEntry} style={S.addBtn}>Add</button>
+              </div>
+            </div>
+
+            {/* Header */}
+            <div style={S.row}>
+              <SortHeader label="Project" field="project" style={{ flex: TCOL.project }} sortField={tsSort.field} sortDir={tsSort.dir} onSort={toggleSort(setTsSort)} />
+              <SortHeader label="No." field="number" style={{ width: TCOL.number }} sortField={tsSort.field} sortDir={tsSort.dir} onSort={toggleSort(setTsSort)} />
+              <SortHeader label="Client" field="client" style={{ flex: TCOL.client }} sortField={tsSort.field} sortDir={tsSort.dir} onSort={toggleSort(setTsSort)} />
+              <SortHeader label="Date" field="date" style={{ width: TCOL.date }} sortField={tsSort.field} sortDir={tsSort.dir} onSort={toggleSort(setTsSort)} />
+              <SortHeader label="Description" field="description" style={{ flex: TCOL.desc }} sortField={tsSort.field} sortDir={tsSort.dir} onSort={toggleSort(setTsSort)} />
+              <SortHeader label="Units" field="units" style={{ width: TCOL.units, textAlign: "right" }} sortField={tsSort.field} sortDir={tsSort.dir} onSort={toggleSort(setTsSort)} />
+              <SortHeader label="Rate" field="rate" style={{ width: TCOL.rate, textAlign: "right" }} sortField={tsSort.field} sortDir={tsSort.dir} onSort={toggleSort(setTsSort)} />
+              <SortHeader label="Total" field="total" style={{ width: TCOL.total, textAlign: "right" }} sortField={tsSort.field} sortDir={tsSort.dir} onSort={toggleSort(setTsSort)} />
+              <div style={{ ...S.cellFixed, width: TCOL.actions }} />
+            </div>
+
+            {/* Filters */}
+            <div style={{ ...S.row, background: C.white, borderBottom: `1px solid ${C.border}` }}>
+              <div style={{ flex: TCOL.project }}><input placeholder="Filter" value={tsFilters.project} onChange={(e) => setTsFilters({ ...tsFilters, project: e.target.value })} style={S.filterInput} /></div>
+              <div style={{ ...S.cellFixed, width: TCOL.number }}><input placeholder="Filter" value={tsFilters.number} onChange={(e) => setTsFilters({ ...tsFilters, number: e.target.value })} style={S.filterInput} /></div>
+              <div style={{ flex: TCOL.client }}><input placeholder="Filter" value={tsFilters.client} onChange={(e) => setTsFilters({ ...tsFilters, client: e.target.value })} style={S.filterInput} /></div>
+              <div style={{ ...S.cellFixed, width: TCOL.date }}><input placeholder="Filter" value={tsFilters.date} onChange={(e) => setTsFilters({ ...tsFilters, date: e.target.value })} style={S.filterInput} /></div>
+              <div style={{ flex: TCOL.desc }}><input placeholder="Filter" value={tsFilters.description} onChange={(e) => setTsFilters({ ...tsFilters, description: e.target.value })} style={S.filterInput} /></div>
+              <div style={{ ...S.cellFixed, width: TCOL.units }} />
+              <div style={{ ...S.cellFixed, width: TCOL.rate }} />
+              <div style={{ ...S.cellFixed, width: TCOL.total }} />
+              <div style={{ ...S.cellFixed, width: TCOL.actions, textAlign: "center" }}>
+                {hasTsF && <button onClick={() => setTsFilters({ project: "", number: "", client: "", date: "", description: "" })} style={S.clearBtn}>Clear</button>}
+              </div>
+            </div>
+
+            {/* Entries */}
+            <div style={S.list}>
+              {sTs.map((e) => {
+                const p = projects.find((pr) => pr.id === e.project_id);
+                const total = (e.units || 0) * (e.rate || 0);
+                return (
+                  <div key={e.id} style={S.row}
+                    onMouseEnter={(ev) => ev.currentTarget.style.background = C.tealLight}
+                    onMouseLeave={(ev) => ev.currentTarget.style.background = C.white}>
+                    <div style={{ ...S.cellFlex, flex: TCOL.project }}>{p?.name || "\u2014"}</div>
+                    <div style={{ ...S.cellFixed, width: TCOL.number, color: C.textMuted }}>{p?.number || "\u2014"}</div>
+                    <div style={{ ...S.cellFlex, flex: TCOL.client }}>{p?.client || "\u2014"}</div>
+                    <div style={{ ...S.cellFixed, width: TCOL.date, color: C.textMuted }}>{e.date || "\u2014"}</div>
+                    <div style={{ ...S.cellFlex, flex: TCOL.desc }}>{e.description}</div>
+                    <div style={{ ...S.cellFixed, width: TCOL.units, textAlign: "right" }}>{e.units || 0}</div>
+                    <div style={{ ...S.cellFixed, width: TCOL.rate, textAlign: "right" }}>${(e.rate || 0).toFixed(0)}</div>
+                    <div style={{ ...S.cellFixed, width: TCOL.total, textAlign: "right", fontWeight: 600, color: C.teal }}>${total.toFixed(2)}</div>
+                    <div style={{ ...S.cellFixed, width: TCOL.actions, display: "flex", gap: 5, justifyContent: "flex-end" }}>
+                      <button onClick={() => setEditingTs({ ...e })} style={S.editBtn}>Edit</button>
+                      <button onClick={() => deleteTsEntry(e.id)} style={S.deleteBtn}>{"\u2715"}</button>
+                    </div>
+                  </div>
+                );
+              })}
+              {sTs.length === 0 && <div style={S.empty}>{hasTsF ? "No entries match filters" : "No time entries yet"}</div>}
+            </div>
+
+            {/* Running total */}
+            {sTs.length > 0 && (
+              <div style={{ ...S.row, borderRadius: 8, border: `1px solid ${C.border}`, fontWeight: 700, color: C.grey }}>
+                <div style={{ flex: 1 }}>Total ({sTs.length} entries)</div>
+                <div style={{ ...S.cellFixed, width: TCOL.total, textAlign: "right", color: C.teal, fontSize: 15 }}>${tsTotal.toFixed(2)}</div>
+                <div style={{ ...S.cellFixed, width: TCOL.actions }} />
+              </div>
+            )}
+
+            {/* Edit modal */}
+            {editingTs && (
+              <Modal title="Edit Time Entry" onClose={() => setEditingTs(null)}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <SearchableDropdown options={projects} value={projects.find((p) => p.id === editingTs.project_id) || null}
+                    onChange={(p) => setEditingTs({ ...editingTs, project_id: p.id })}
+                    placeholder="Search project" displayKey="name" />
+                  <input type="date" value={editingTs.date || ""} onChange={(e) => setEditingTs({ ...editingTs, date: e.target.value })} style={{ ...S.input, cursor: "pointer" }} />
+                  <input value={editingTs.description} onChange={(e) => setEditingTs({ ...editingTs, description: e.target.value })} placeholder="Description" style={S.input} />
+                  <div style={{ display: "flex", gap: 12 }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ fontSize: 11, fontWeight: 600, color: C.grey, textTransform: "uppercase", marginBottom: 4, display: "block" }}>Units (hrs)</label>
+                      <input type="number" step="0.25" value={editingTs.units} onChange={(e) => setEditingTs({ ...editingTs, units: e.target.value })} style={{ ...S.input, textAlign: "right" }} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ fontSize: 11, fontWeight: 600, color: C.grey, textTransform: "uppercase", marginBottom: 4, display: "block" }}>Rate ($)</label>
+                      <input type="number" value={editingTs.rate} onChange={(e) => setEditingTs({ ...editingTs, rate: e.target.value })} style={{ ...S.input, textAlign: "right" }} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ fontSize: 11, fontWeight: 600, color: C.grey, textTransform: "uppercase", marginBottom: 4, display: "block" }}>Total</label>
+                      <div style={{ ...S.input, background: C.bg, color: C.teal, fontWeight: 700, textAlign: "right" }}>
+                        ${((parseFloat(editingTs.units) || 0) * (parseFloat(editingTs.rate) || 0)).toFixed(2)}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
+                    <button onClick={() => setEditingTs(null)} style={S.cancelBtn}>Cancel</button>
+                    <button onClick={() => updateTsEntry(editingTs)} style={S.addBtn}>Save</button>
+                  </div>
+                </div>
+              </Modal>
+            )}
           </>
         )}
 
