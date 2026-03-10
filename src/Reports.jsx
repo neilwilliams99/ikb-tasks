@@ -45,6 +45,9 @@ export default function Reports({ supabase, projects, S }) {
       ref_docs: [""],
       caveats: [...DEFAULT_CAVEATS],
       hide_caveats: false,
+      hide_ref_docs: false,
+      hide_items: false,
+      hide_image: false,
       items: [
         { text: "Pre-pour inspection is limited to checking the formwork has been installed generally in accordance with the reference documents." },
         { text: "Inspection was undertaken in person." },
@@ -134,6 +137,9 @@ export default function Reports({ supabase, projects, S }) {
       ref_docs: JSON.stringify(form.ref_docs),
       caveats: JSON.stringify(form.caveats),
       hide_caveats: form.hide_caveats,
+      hide_ref_docs: form.hide_ref_docs,
+      hide_items: form.hide_items,
+      hide_image: form.hide_image,
       items: JSON.stringify(form.items),
       image_data: form.image || null,
     };
@@ -162,6 +168,9 @@ export default function Reports({ supabase, projects, S }) {
       ref_docs: safeJson(r.ref_docs, [""]),
       caveats: safeJson(r.caveats, [...DEFAULT_CAVEATS]),
       hide_caveats: r.hide_caveats || false,
+      hide_ref_docs: r.hide_ref_docs || false,
+      hide_items: r.hide_items || false,
+      hide_image: r.hide_image || false,
       items: safeJson(r.items, safeJson(r.item1_text ? JSON.stringify([
         { text: r.item1_text },
         { text: r.item2_text },
@@ -260,17 +269,21 @@ export default function Reports({ supabase, projects, S }) {
       doc.setFont("helvetica", "normal");
 
       let textY = cellY + 5;
-      doc.text("The following reference documents have been used to undertake this inspection:", ml + itemColW + 2, textY);
-      textY += 5;
 
-      refDocs.forEach((rd) => {
-        if (rd.trim()) {
-          doc.text("\u2022   " + rd, ml + itemColW + 6, textY);
-          textY += 4.5;
-        }
-      });
+      const hideRefDocs = rd.hide_ref_docs;
+      if (!hideRefDocs) {
+        doc.text("The following reference documents have been used to undertake this inspection:", ml + itemColW + 2, textY);
+        textY += 5;
 
-      textY += 3;
+        refDocs.forEach((rd) => {
+          if (rd.trim()) {
+            doc.text("\u2022   " + rd, ml + itemColW + 6, textY);
+            textY += 4.5;
+          }
+        });
+
+        textY += 3;
+      }
       const hideCaveats = rd.hide_caveats;
       if (!hideCaveats) {
         doc.text("This certification is subject to the following items:", ml + itemColW + 2, textY);
@@ -288,45 +301,51 @@ export default function Reports({ supabase, projects, S }) {
       }
 
       let cellH = textY - cellY;
-      doc.rect(ml, cellY, itemColW, cellH);
-      doc.rect(ml + itemColW, cellY, commColW, cellH);
+      if (!hideRefDocs || !hideCaveats) {
+        doc.rect(ml, cellY, itemColW, cellH);
+        doc.rect(ml + itemColW, cellY, commColW, cellH);
+      }
       y = cellY + cellH;
 
       // Numbered items
-      const items = typeof rd.items === "string" ? safeJson(rd.items, []) : (rd.items || []);
-      // Backward compat: if old format with item1_text etc
-      const itemList = items.length > 0 ? items : [
-        { text: rd.item1_text || "" },
-        { text: rd.item2_text || "" },
-        { text: "Amendments required on site prior to Pour (refer IKB Engineering mark-up):\n" + (rd.item3_text || "") },
-      ];
+      const hideItems = rd.hide_items;
+      if (!hideItems) {
+        const items = typeof rd.items === "string" ? safeJson(rd.items, []) : (rd.items || []);
+        // Backward compat: if old format with item1_text etc
+        const itemList = items.length > 0 ? items : [
+          { text: rd.item1_text || "" },
+          { text: rd.item2_text || "" },
+          { text: "Amendments required on site prior to Pour (refer IKB Engineering mark-up):\n" + (rd.item3_text || "") },
+        ];
 
-      itemList.forEach((item, idx) => {
-        const txt = item.text || "";
-        const lines = doc.splitTextToSize(txt, commColW - 6);
-        const rowH = Math.max(8, lines.length * 4 + 4);
+        itemList.forEach((item, idx) => {
+          const txt = item.text || "";
+          const lines = doc.splitTextToSize(txt, commColW - 6);
+          const rowH = Math.max(8, lines.length * 4 + 4);
 
-        if (y + rowH > ph - 35) { addNewPage(doc, ml, mr, pw); y = 55; }
+          if (y + rowH > ph - 35) { addNewPage(doc, ml, mr, pw); y = 55; }
 
-        doc.setFont("helvetica", "bold");
-        doc.text(String(idx + 1), ml + 5, y + 5);
-        doc.setFont("helvetica", "normal");
-        let ly = y + 5;
-        lines.forEach((line) => {
-          doc.text(line, ml + itemColW + 2, ly);
-          ly += 4;
+          doc.setFont("helvetica", "bold");
+          doc.text(String(idx + 1), ml + 5, y + 5);
+          doc.setFont("helvetica", "normal");
+          let ly = y + 5;
+          lines.forEach((line) => {
+            doc.text(line, ml + itemColW + 2, ly);
+            ly += 4;
+          });
+
+          doc.rect(ml, y, itemColW, rowH);
+          doc.rect(ml + itemColW, y, commColW, rowH);
+          y += rowH;
         });
-
-        doc.rect(ml, y, itemColW, rowH);
-        doc.rect(ml + itemColW, y, commColW, rowH);
-        y += rowH;
-      });
+      }
 
       drawFooter(doc, ml, ph);
 
       // ── Page 2 (image) ──
       const imgData = rd.image || rd.image_data;
-      if (imgData) {
+      const hideImage = rd.hide_image;
+      if (imgData && !hideImage) {
         doc.addPage();
         drawHeader(doc, ml, mr, pw);
 
@@ -470,16 +489,30 @@ export default function Reports({ supabase, projects, S }) {
           </div>
 
           <div style={sty.card}>
-            <h2 style={sty.section}>Reference Documents</h2>
-            {form.ref_docs.map((doc, i) => (
-              <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                <input value={doc} onChange={(e) => updateRefDoc(i, e.target.value)} placeholder="Reference document" style={{ ...S.input, flex: 1 }} />
-                {form.ref_docs.length > 1 && (
-                  <button onClick={() => removeRefDoc(i)} style={{ ...S.deleteBtn, width: 32, height: 32 }}>{"\u2715"}</button>
-                )}
-              </div>
-            ))}
-            <button onClick={addRefDoc} style={{ ...S.editBtn, marginTop: 4 }}>+ Add Reference</button>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, paddingBottom: 8, borderBottom: `2px solid ${C.teal}` }}>
+              <h2 style={{ fontSize: 15, fontWeight: 700, color: C.grey, margin: 0 }}>Reference Documents</h2>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, color: form.hide_ref_docs ? C.danger : C.textMuted }}>
+                <input type="checkbox" checked={form.hide_ref_docs} onChange={(e) => updateField("hide_ref_docs", e.target.checked)}
+                  style={{ width: 16, height: 16, accentColor: C.danger, cursor: "pointer" }} />
+                Do not print
+              </label>
+            </div>
+            {!form.hide_ref_docs && (
+              <>
+                {form.ref_docs.map((doc, i) => (
+                  <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                    <input value={doc} onChange={(e) => updateRefDoc(i, e.target.value)} placeholder="Reference document" style={{ ...S.input, flex: 1 }} />
+                    {form.ref_docs.length > 1 && (
+                      <button onClick={() => removeRefDoc(i)} style={{ ...S.deleteBtn, width: 32, height: 32 }}>{"\u2715"}</button>
+                    )}
+                  </div>
+                ))}
+                <button onClick={addRefDoc} style={{ ...S.editBtn, marginTop: 4 }}>+ Add Reference</button>
+              </>
+            )}
+            {form.hide_ref_docs && (
+              <p style={{ fontSize: 13, color: C.textMuted, fontStyle: "italic", padding: "8px 0" }}>Reference documents will not be included in the PDF.</p>
+            )}
           </div>
 
           <div style={sty.card}>
@@ -508,35 +541,63 @@ export default function Reports({ supabase, projects, S }) {
           </div>
 
           <div style={sty.card}>
-            <h2 style={sty.section}>Inspection Items</h2>
-            {form.items.map((item, i) => (
-              <div key={i} style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "flex-start" }}>
-                <div style={{ width: 32, paddingTop: 8, fontWeight: 700, fontSize: 13, color: C.grey, textAlign: "center", flexShrink: 0 }}>{i + 1}</div>
-                <textarea value={item.text} onChange={(e) => {
-                  const newItems = [...form.items];
-                  newItems[i] = { text: e.target.value };
-                  setForm((f) => ({ ...f, items: newItems }));
-                }} rows={2} style={{ ...S.input, flex: 1, resize: "vertical", lineHeight: 1.5 }} />
-                {form.items.length > 1 && (
-                  <button onClick={() => {
-                    const newItems = form.items.filter((_, idx) => idx !== i);
-                    setForm((f) => ({ ...f, items: newItems }));
-                  }} style={{ ...S.deleteBtn, width: 32, height: 32, marginTop: 4 }}>{"\u2715"}</button>
-                )}
-              </div>
-            ))}
-            <button onClick={() => setForm((f) => ({ ...f, items: [...f.items, { text: "" }] }))} style={{ ...S.editBtn, marginTop: 4 }}>+ Add Item</button>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, paddingBottom: 8, borderBottom: `2px solid ${C.teal}` }}>
+              <h2 style={{ fontSize: 15, fontWeight: 700, color: C.grey, margin: 0 }}>Inspection Items</h2>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, color: form.hide_items ? C.danger : C.textMuted }}>
+                <input type="checkbox" checked={form.hide_items} onChange={(e) => updateField("hide_items", e.target.checked)}
+                  style={{ width: 16, height: 16, accentColor: C.danger, cursor: "pointer" }} />
+                Do not print
+              </label>
+            </div>
+            {!form.hide_items && (
+              <>
+                {form.items.map((item, i) => (
+                  <div key={i} style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "flex-start" }}>
+                    <div style={{ width: 32, paddingTop: 8, fontWeight: 700, fontSize: 13, color: C.grey, textAlign: "center", flexShrink: 0 }}>{i + 1}</div>
+                    <textarea value={item.text} onChange={(e) => {
+                      const newItems = [...form.items];
+                      newItems[i] = { text: e.target.value };
+                      setForm((f) => ({ ...f, items: newItems }));
+                    }} rows={2} style={{ ...S.input, flex: 1, resize: "vertical", lineHeight: 1.5 }} />
+                    {form.items.length > 1 && (
+                      <button onClick={() => {
+                        const newItems = form.items.filter((_, idx) => idx !== i);
+                        setForm((f) => ({ ...f, items: newItems }));
+                      }} style={{ ...S.deleteBtn, width: 32, height: 32, marginTop: 4 }}>{"\u2715"}</button>
+                    )}
+                  </div>
+                ))}
+                <button onClick={() => setForm((f) => ({ ...f, items: [...f.items, { text: "" }] }))} style={{ ...S.editBtn, marginTop: 4 }}>+ Add Item</button>
+              </>
+            )}
+            {form.hide_items && (
+              <p style={{ fontSize: 13, color: C.textMuted, fontStyle: "italic", padding: "8px 0" }}>Inspection items will not be included in the PDF.</p>
+            )}
           </div>
 
           <div style={sty.card}>
-            <h2 style={sty.section}>Page 2 Image (Screenshot / Markup)</h2>
-            <p style={{ fontSize: 12, color: C.textMuted, marginBottom: 12 }}>Upload an image or paste a screenshot (Ctrl+V anywhere on this page).</p>
-            <input type="file" accept="image/*" onChange={handleImage} style={{ marginBottom: 12, fontSize: 13 }} />
-            {form.imagePreview && (
-              <div style={{ marginTop: 8 }}>
-                <img src={form.imagePreview} alt="Preview" style={{ maxWidth: "100%", maxHeight: 300, border: `1px solid ${C.border}`, borderRadius: 6 }} />
-                <button onClick={() => setForm((f) => ({ ...f, image: null, imagePreview: null }))} style={{ ...S.deleteBtn, marginTop: 8, width: "auto", height: "auto", padding: "4px 12px" }}>Remove Image</button>
-              </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, paddingBottom: 8, borderBottom: `2px solid ${C.teal}` }}>
+              <h2 style={{ fontSize: 15, fontWeight: 700, color: C.grey, margin: 0 }}>Page 2 Image (Screenshot / Markup)</h2>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, color: form.hide_image ? C.danger : C.textMuted }}>
+                <input type="checkbox" checked={form.hide_image} onChange={(e) => updateField("hide_image", e.target.checked)}
+                  style={{ width: 16, height: 16, accentColor: C.danger, cursor: "pointer" }} />
+                Do not print
+              </label>
+            </div>
+            {!form.hide_image && (
+              <>
+                <p style={{ fontSize: 12, color: C.textMuted, marginBottom: 12 }}>Upload an image or paste a screenshot (Ctrl+V anywhere on this page).</p>
+                <input type="file" accept="image/*" onChange={handleImage} style={{ marginBottom: 12, fontSize: 13 }} />
+                {form.imagePreview && (
+                  <div style={{ marginTop: 8 }}>
+                    <img src={form.imagePreview} alt="Preview" style={{ maxWidth: "100%", maxHeight: 300, border: `1px solid ${C.border}`, borderRadius: 6 }} />
+                    <button onClick={() => setForm((f) => ({ ...f, image: null, imagePreview: null }))} style={{ ...S.deleteBtn, marginTop: 8, width: "auto", height: "auto", padding: "4px 12px" }}>Remove Image</button>
+                  </div>
+                )}
+              </>
+            )}
+            {form.hide_image && (
+              <p style={{ fontSize: 13, color: C.textMuted, fontStyle: "italic", padding: "8px 0" }}>Image page will not be included in the PDF.</p>
             )}
           </div>
 
