@@ -329,20 +329,21 @@ export default function Reports({ supabase, projects, S }) {
         doc.setTextColor(51, 51, 51);
         doc.text("RECORD OF INSPECTION", ml, 58);
 
-        // Fit image in remaining space
+        // Load image to get real dimensions for correct aspect ratio
         const imgY = 68;
         const maxH = ph - imgY - 30;
         const maxW = contentW;
 
-        try {
-          const dims = getImageDimensions(imgData);
-          let iw = maxW, ih = (dims.h / dims.w) * maxW;
-          if (ih > maxH) { ih = maxH; iw = (dims.w / dims.h) * maxH; }
-          const ix = ml + (contentW - iw) / 2;
-          doc.addImage(imgData, "PNG", ix, imgY, iw, ih);
-        } catch {
-          doc.addImage(imgData, "PNG", ml, imgY, maxW, maxH);
+        const dims = await loadImageDimensions(imgData);
+        const aspect = dims.h / dims.w;
+        let iw = maxW;
+        let ih = iw * aspect;
+        if (ih > maxH) {
+          ih = maxH;
+          iw = ih / aspect;
         }
+        const ix = ml + (contentW - iw) / 2;
+        doc.addImage(imgData, "PNG", ix, imgY, iw, ih);
 
         drawFooter(doc, ml, ph);
       }
@@ -370,25 +371,36 @@ export default function Reports({ supabase, projects, S }) {
 
       {/* ═══ LIBRARY ═══ */}
       {view === "library" && (
-        <div style={S.list}>
-          {reports.length === 0 && <div style={{ ...sty.empty }}>No reports yet</div>}
-          {reports.map((r) => (
-            <div key={r.id} style={{ ...S.row, cursor: "default" }}
-              onMouseEnter={(e) => e.currentTarget.style.background = C.tealLight || "#e6f5f5"}
-              onMouseLeave={(e) => e.currentTarget.style.background = C.white}>
-              <div style={{ flex: 1, fontWeight: 600, fontSize: 13 }}>{r.ikb_reference}</div>
-              <div style={{ flex: 2, fontSize: 13 }}>{r.subject}</div>
-              <div style={{ flex: 1, fontSize: 13 }}>{r.project_name}</div>
-              <div style={{ flex: 1, fontSize: 12, color: C.textMuted }}>{r.to_company}</div>
-              <div style={{ width: 90, fontSize: 12, color: C.textMuted }}>{formatDate(r.date)}</div>
-              <div style={{ display: "flex", gap: 5, width: 180, justifyContent: "flex-end" }}>
-                <button onClick={() => generatePdf(r)} disabled={generating} style={sty.pdfBtn}>{generating ? "..." : "PDF"}</button>
-                <button onClick={() => editReport(r)} style={S.editBtn}>Edit</button>
-                <button onClick={() => deleteReport(r.id)} style={S.deleteBtn}>{"\u2715"}</button>
+        <>
+          {/* Column headers */}
+          <div style={{ ...S.row, borderBottom: `2px solid ${C.teal}` }}>
+            <div style={{ width: 100, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.6px", color: C.grey }}>Ref</div>
+            <div style={{ flex: 2, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.6px", color: C.grey }}>Project Name</div>
+            <div style={{ flex: 1, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.6px", color: C.grey }}>Client</div>
+            <div style={{ width: 90, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.6px", color: C.grey }}>Date</div>
+            <div style={{ flex: 2, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.6px", color: C.grey }}>Description</div>
+            <div style={{ width: 180 }} />
+          </div>
+          <div style={S.list}>
+            {reports.length === 0 && <div style={{ ...sty.empty }}>No reports yet</div>}
+            {reports.map((r) => (
+              <div key={r.id} style={{ ...S.row, cursor: "default" }}
+                onMouseEnter={(e) => e.currentTarget.style.background = "#e6f5f5"}
+                onMouseLeave={(e) => e.currentTarget.style.background = C.white}>
+                <div style={{ width: 100, fontWeight: 600, fontSize: 13 }}>{r.ikb_reference}</div>
+                <div style={{ flex: 2, fontSize: 13 }}>{r.project_name}</div>
+                <div style={{ flex: 1, fontSize: 13, color: C.textMuted }}>{r.to_company}</div>
+                <div style={{ width: 90, fontSize: 12, color: C.textMuted }}>{formatDate(r.date)}</div>
+                <div style={{ flex: 2, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.subject}</div>
+                <div style={{ display: "flex", gap: 5, width: 180, justifyContent: "flex-end" }}>
+                  <button onClick={() => generatePdf(r)} disabled={generating} style={sty.pdfBtn}>{generating ? "..." : "PDF"}</button>
+                  <button onClick={() => editReport(r)} style={S.editBtn}>Edit</button>
+                  <button onClick={() => deleteReport(r.id)} style={S.deleteBtn}>{"\u2715"}</button>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </>
       )}
 
       {/* ═══ FORM ═══ */}
@@ -543,9 +555,13 @@ function addNewPage(doc, ml, mr, pw) {
   drawHeader(doc, ml, mr, pw);
 }
 
-function getImageDimensions(dataUrl) {
-  // Simple default — actual dims would need async image load
-  return { w: 800, h: 600 };
+function loadImageDimensions(dataUrl) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+    img.onerror = () => resolve({ w: 800, h: 600 }); // fallback
+    img.src = dataUrl;
+  });
 }
 
 // ─── SEARCH SELECT (simplified) ────────────────────────────────────────────
