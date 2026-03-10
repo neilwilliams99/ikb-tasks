@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { jsPDF } from "jspdf";
 import { LOGO_BASE64 } from "./logoBase64.js";
 
 // ─── BRAND ─────────────────────────────────────────────────────────────────
@@ -182,7 +183,6 @@ export default function Reports({ supabase, projects, S }) {
   const generatePdf = async (reportData) => {
     setGenerating(true);
     try {
-      const { jsPDF } = window.jspdf;
       const doc = new jsPDF({ unit: "mm", format: "a4" });
       const pw = 210, ph = 297;
       const ml = 20, mr = 20, contentW = pw - ml - mr;
