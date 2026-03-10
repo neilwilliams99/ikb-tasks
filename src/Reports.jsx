@@ -44,6 +44,7 @@ export default function Reports({ supabase, projects, S }) {
       subject: "",
       ref_docs: [""],
       caveats: [...DEFAULT_CAVEATS],
+      hide_caveats: false,
       items: [
         { text: "Pre-pour inspection is limited to checking the formwork has been installed generally in accordance with the reference documents." },
         { text: "Inspection was undertaken in person." },
@@ -132,6 +133,7 @@ export default function Reports({ supabase, projects, S }) {
       subject: form.subject,
       ref_docs: JSON.stringify(form.ref_docs),
       caveats: JSON.stringify(form.caveats),
+      hide_caveats: form.hide_caveats,
       items: JSON.stringify(form.items),
       image_data: form.image || null,
     };
@@ -159,6 +161,7 @@ export default function Reports({ supabase, projects, S }) {
       subject: r.subject || "",
       ref_docs: safeJson(r.ref_docs, [""]),
       caveats: safeJson(r.caveats, [...DEFAULT_CAVEATS]),
+      hide_caveats: r.hide_caveats || false,
       items: safeJson(r.items, safeJson(r.item1_text ? JSON.stringify([
         { text: r.item1_text },
         { text: r.item2_text },
@@ -268,18 +271,21 @@ export default function Reports({ supabase, projects, S }) {
       });
 
       textY += 3;
-      doc.text("This certification is subject to the following items:", ml + itemColW + 2, textY);
-      textY += 5;
+      const hideCaveats = rd.hide_caveats;
+      if (!hideCaveats) {
+        doc.text("This certification is subject to the following items:", ml + itemColW + 2, textY);
+        textY += 5;
 
-      caveats.forEach((c) => {
-        const lines = doc.splitTextToSize("\u2022   " + c, commColW - 10);
-        lines.forEach((line) => {
-          if (textY > ph - 35) { addNewPage(doc, ml, mr, pw); textY = 55; }
-          doc.text(line, ml + itemColW + 6, textY);
-          textY += 4;
+        caveats.forEach((c) => {
+          const lines = doc.splitTextToSize("\u2022   " + c, commColW - 10);
+          lines.forEach((line) => {
+            if (textY > ph - 35) { addNewPage(doc, ml, mr, pw); textY = 55; }
+            doc.text(line, ml + itemColW + 6, textY);
+            textY += 4;
+          });
+          textY += 1;
         });
-        textY += 1;
-      });
+      }
 
       let cellH = textY - cellY;
       doc.rect(ml, cellY, itemColW, cellH);
@@ -477,14 +483,28 @@ export default function Reports({ supabase, projects, S }) {
           </div>
 
           <div style={sty.card}>
-            <h2 style={sty.section}>Certification Caveats</h2>
-            <p style={{ fontSize: 12, color: C.textMuted, marginBottom: 12 }}>These are pre-populated. Edit only if needed for this report.</p>
-            {form.caveats.map((c, i) => (
-              <div key={i} style={{ marginBottom: 8 }}>
-                <textarea value={c} onChange={(e) => updateCaveat(i, e.target.value)}
-                  rows={2} style={{ ...S.input, resize: "vertical", lineHeight: 1.5 }} />
-              </div>
-            ))}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, paddingBottom: 8, borderBottom: `2px solid ${C.teal}` }}>
+              <h2 style={{ fontSize: 15, fontWeight: 700, color: C.grey, margin: 0 }}>Certification Caveats</h2>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, color: form.hide_caveats ? C.danger : C.textMuted }}>
+                <input type="checkbox" checked={form.hide_caveats} onChange={(e) => updateField("hide_caveats", e.target.checked)}
+                  style={{ width: 16, height: 16, accentColor: C.danger, cursor: "pointer" }} />
+                Do not print
+              </label>
+            </div>
+            {!form.hide_caveats && (
+              <>
+                <p style={{ fontSize: 12, color: C.textMuted, marginBottom: 12 }}>These are pre-populated. Edit only if needed for this report.</p>
+                {form.caveats.map((c, i) => (
+                  <div key={i} style={{ marginBottom: 8 }}>
+                    <textarea value={c} onChange={(e) => updateCaveat(i, e.target.value)}
+                      rows={2} style={{ ...S.input, resize: "vertical", lineHeight: 1.5 }} />
+                  </div>
+                ))}
+              </>
+            )}
+            {form.hide_caveats && (
+              <p style={{ fontSize: 13, color: C.textMuted, fontStyle: "italic", padding: "8px 0" }}>Caveats will not be included in the PDF.</p>
+            )}
           </div>
 
           <div style={sty.card}>
