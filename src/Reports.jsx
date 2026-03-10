@@ -349,7 +349,29 @@ export default function Reports({ supabase, projects, S }) {
       }
 
       const filename = `${rd.ikb_reference || "report"}_${rd.subject || "inspection"}.pdf`.replace(/[^a-zA-Z0-9._-]/g, "_");
-      doc.save(filename);
+
+      // Use Save As dialog if browser supports it, otherwise fall back to download
+      if (window.showSaveFilePicker) {
+        try {
+          const handle = await window.showSaveFilePicker({
+            suggestedName: filename,
+            types: [{
+              description: "PDF Document",
+              accept: { "application/pdf": [".pdf"] },
+            }],
+          });
+          const writable = await handle.createWritable();
+          await writable.write(doc.output("blob"));
+          await writable.close();
+        } catch (saveErr) {
+          // User cancelled the dialog — don't treat as error
+          if (saveErr.name !== "AbortError") {
+            doc.save(filename);
+          }
+        }
+      } else {
+        doc.save(filename);
+      }
     } catch (err) {
       console.error("PDF generation failed:", err);
       alert("PDF generation failed. Check console for details.");
