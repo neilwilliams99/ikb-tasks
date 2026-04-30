@@ -194,6 +194,14 @@ export default function Reports({ supabase, projects, S }) {
     setView("form");
   };
 
+  // ─── EMAIL ─────────────────────────────────────────────────────────────
+  const emailReport = (reportData) => {
+    const rd = reportData || form;
+    const subject = `${rd.project_name || ""} / ${rd.subject || ""}`;
+    const body = "Hi gents,\r\n\r\nPlease find today's inspection report attached.\r\n\r\nCheers,\r\nNeil";
+    window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  };
+
   // ─── PDF GENERATION ────────────────────────────────────────────────────
   const generatePdf = async (reportData) => {
     setGenerating(true);
@@ -426,7 +434,7 @@ export default function Reports({ supabase, projects, S }) {
             <div style={{ flex: 1, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.6px", color: C.grey }}>Client</div>
             <div style={{ width: 90, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.6px", color: C.grey }}>Date</div>
             <div style={{ flex: 2, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.6px", color: C.grey }}>Description</div>
-            <div style={{ width: 180 }} />
+            <div style={{ width: 230 }} />
           </div>
           <div style={S.list}>
             {reports.length === 0 && <div style={{ ...sty.empty }}>No reports yet</div>}
@@ -439,8 +447,9 @@ export default function Reports({ supabase, projects, S }) {
                 <div style={{ flex: 1, fontSize: 13, color: C.textMuted }}>{r.to_company}</div>
                 <div style={{ width: 90, fontSize: 12, color: C.textMuted }}>{formatDate(r.date)}</div>
                 <div style={{ flex: 2, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.subject}</div>
-                <div style={{ display: "flex", gap: 5, width: 180, justifyContent: "flex-end" }}>
+                <div style={{ display: "flex", gap: 5, width: 230, justifyContent: "flex-end" }}>
                   <button onClick={() => generatePdf(r)} disabled={generating} style={sty.pdfBtn}>{generating ? "..." : "PDF"}</button>
+                  <button onClick={() => emailReport(r)} style={sty.emailBtn}>Email</button>
                   <button onClick={() => editReport(r)} style={S.editBtn}>Edit</button>
                   <button onClick={() => deleteReport(r.id)} style={S.deleteBtn}>{"\u2715"}</button>
                 </div>
@@ -605,6 +614,7 @@ export default function Reports({ supabase, projects, S }) {
             <button onClick={() => { setView("library"); setEditingId(null); setForm(emptyForm()); }} style={S.cancelBtn}>Cancel</button>
             <button onClick={saveReport} style={S.addBtn}>{editingId ? "Update Report" : "Save Report"}</button>
             <button onClick={() => generatePdf()} disabled={generating} style={sty.pdfBtn}>{generating ? "Generating..." : "Generate PDF"}</button>
+            <button onClick={() => emailReport()} style={sty.emailBtn}>Email</button>
           </div>
         </div>
       )}
@@ -745,6 +755,18 @@ const sty = {
     fontSize: 12,
     fontWeight: 700,
     background: C.grey,
+    border: "none",
+    color: C.white,
+    borderRadius: 4,
+    cursor: "pointer",
+    fontFamily: "inherit",
+    whiteSpace: "nowrap",
+  },
+  emailBtn: {
+    padding: "5px 14px",
+    fontSize: 12,
+    fontWeight: 700,
+    background: C.teal,
     border: "none",
     color: C.white,
     borderRadius: 4,
