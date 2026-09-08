@@ -387,6 +387,13 @@ export default function App() {
   const toggleSort = (setter) => (field) => {
     setter((prev) => ({ field, dir: prev.field === field && prev.dir === "asc" ? "desc" : "asc" }));
   };
+  // Task headers cycle asc -> desc -> unsorted, so the manual drag order is reachable again.
+  const toggleTaskSort = (field) => {
+    setTaskSort((prev) =>
+      prev.field !== field ? { field, dir: "asc" }
+        : prev.dir === "asc" ? { field, dir: "desc" }
+          : { field: null, dir: "asc" });
+  };
   const sortArr = (arr, s, getVal) => {
     if (!s.field) return arr;
     const d = s.dir === "asc" ? 1 : -1;
@@ -498,11 +505,11 @@ export default function App() {
             {/* Header row */}
             <div style={S.row}>
               <div style={{ ...S.cellFixed, width: COL.grip }} />
-              <SortHeader label="Project" field="project" style={{ flex: COL.project }} sortField={taskSort.field} sortDir={taskSort.dir} onSort={toggleSort(setTaskSort)} />
-              <SortHeader label="Number" field="number" style={{ width: COL.number }} sortField={taskSort.field} sortDir={taskSort.dir} onSort={toggleSort(setTaskSort)} />
-              <SortHeader label="Client" field="client" style={{ flex: COL.client }} sortField={taskSort.field} sortDir={taskSort.dir} onSort={toggleSort(setTaskSort)} />
-              <SortHeader label="Date" field="date" style={{ width: COL.date }} sortField={taskSort.field} sortDir={taskSort.dir} onSort={toggleSort(setTaskSort)} />
-              <SortHeader label="Task" field="description" style={{ flex: COL.task }} sortField={taskSort.field} sortDir={taskSort.dir} onSort={toggleSort(setTaskSort)} />
+              <SortHeader label="Project" field="project" style={{ flex: COL.project }} sortField={taskSort.field} sortDir={taskSort.dir} onSort={toggleTaskSort} />
+              <SortHeader label="Number" field="number" style={{ width: COL.number }} sortField={taskSort.field} sortDir={taskSort.dir} onSort={toggleTaskSort} />
+              <SortHeader label="Client" field="client" style={{ flex: COL.client }} sortField={taskSort.field} sortDir={taskSort.dir} onSort={toggleTaskSort} />
+              <SortHeader label="Date" field="date" style={{ width: COL.date }} sortField={taskSort.field} sortDir={taskSort.dir} onSort={toggleTaskSort} />
+              <SortHeader label="Task" field="description" style={{ flex: COL.task }} sortField={taskSort.field} sortDir={taskSort.dir} onSort={toggleTaskSort} />
               <div style={{ ...S.cellFixed, width: COL.actions }} />
             </div>
 
