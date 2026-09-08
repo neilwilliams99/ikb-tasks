@@ -103,7 +103,7 @@ function SortHeader({ label, field, sortField, sortDir, onSort, style }) {
 }
 
 // ─── TASK ROW ──────────────────────────────────────────────────────────────
-function TaskRow({ task, index, projects, onComplete, onEdit, onToggleHold, onTogglePriority, onOpenNotes, noteCount, onDragStart, onDragOver, onDrop }) {
+function TaskRow({ task, projects, canDrag, onComplete, onEdit, onToggleHold, onTogglePriority, onOpenNotes, noteCount, onDragStart, onDrop }) {
   const project = projects.find((p) => p.id === task.project_id);
   const hold = task.on_hold;
   const priority = task.priority;
@@ -111,15 +111,16 @@ function TaskRow({ task, index, projects, onComplete, onEdit, onToggleHold, onTo
   const textColor = hold ? C.holdText : priority ? C.priorityText : undefined;
 
   return (
-    <div draggable
-      onDragStart={(e) => onDragStart(e, index)}
-      onDragOver={(e) => { e.preventDefault(); onDragOver(e, index); }}
-      onDrop={(e) => onDrop(e, index)}
+    <div draggable={canDrag}
+      onDragStart={(e) => { if (canDrag) onDragStart(e, task.id); }}
+      onDragOver={(e) => { if (canDrag) e.preventDefault(); }}
+      onDrop={(e) => { if (canDrag) onDrop(e, task.id); }}
       style={{ ...S.row, background: rowBg }}
-      onMouseEnter={(e) => { if (!hold && !priority) e.currentTarget.style.background = C.tealLight; e.currentTarget.querySelector('.grip').style.opacity = 1; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = rowBg; e.currentTarget.querySelector('.grip').style.opacity = 0.25; }}
+      onMouseEnter={(e) => { if (!hold && !priority) e.currentTarget.style.background = C.tealLight; if (canDrag) e.currentTarget.querySelector('.grip').style.opacity = 1; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = rowBg; e.currentTarget.querySelector('.grip').style.opacity = canDrag ? 0.25 : 0.1; }}
     >
-      <div className="grip" style={{ ...S.cellFixed, width: COL.grip, color: C.textMuted, opacity: 0.25, fontSize: 18, textAlign: "center", cursor: "grab", userSelect: "none", transition: "opacity 0.15s" }}>{"\u2807"}</div>
+      <div className="grip" title={canDrag ? "Drag to reorder" : "Clear the column sort to reorder tasks"}
+        style={{ ...S.cellFixed, width: COL.grip, color: C.textMuted, opacity: canDrag ? 0.25 : 0.1, fontSize: 18, textAlign: "center", cursor: canDrag ? "grab" : "default", userSelect: "none", transition: "opacity 0.15s" }}>{"\u2807"}</div>
       <div style={{ ...S.cellFlex, flex: COL.project, color: textColor }}>{project?.name || "\u2014"}</div>
       <div style={{ ...S.cellFixed, width: COL.number, color: textColor || C.textMuted }}>{project?.number || "\u2014"}</div>
       <div style={{ ...S.cellFlex, flex: COL.client, color: textColor }}>{project?.client || "\u2014"}</div>
@@ -254,7 +255,6 @@ export default function App() {
   const [editingTs, setEditingTs] = useState(null);
 
   const dragItem = useRef(null);
-  const dragOverItem = useRef(null);
 
   const [allNotes, setAllNotes] = useState([]);
 
@@ -358,20 +358,41 @@ export default function App() {
     setTsEntries((prev) => prev.filter((e) => e.id !== id));
   };
 
-  // Drag
-  const onDragStart = (e, i) => { dragItem.current = i; e.dataTransfer.effectAllowed = "move"; };
-  const onDragOver = (e, i) => { dragOverItem.current = i; };
-  const onDrop = () => {
+  // Drag — track task ids, not row positions: the rendered list (sTasks) is
+  // filtered, so its indices do not line up with the raw `tasks` array.
+  const onDragStart = (e, id) => { dragItem.current = id; e.dataTransfer.effectAllowed = "move"; };
+  const onDrop = async (e, targetId) => {
+    e.preventDefault();
+    const draggedId = dragItem.current;
+    dragItem.current = null;
+    if (!draggedId || draggedId === targetId) return;
+    const from = tasks.findIndex((t) => t.id === draggedId);
+    const to = tasks.findIndex((t) => t.id === targetId);
+    if (from === -1 || to === -1) return;
+
     const items = [...tasks];
-    const [dragged] = items.splice(dragItem.current, 1);
-    items.splice(dragOverItem.current, 0, dragged);
-    setTasks(items.map((t, i) => ({ ...t, sort_order: i })));
-    dragItem.current = null; dragOverItem.current = null;
+    const [dragged] = items.splice(from, 1);
+    items.splice(to, 0, dragged);
+    const reordered = items.map((t, i) => ({ ...t, sort_order: i }));
+
+    const prev = {};
+    tasks.forEach((t) => { prev[t.id] = t.sort_order; });
+    const changed = reordered.filter((t) => prev[t.id] !== t.sort_order);
+
+    setTasks(reordered);
+    await Promise.all(changed.map((t) => supabase.from("tasks").update({ sort_order: t.sort_order }, t.id)));
   };
 
   // Sort
   const toggleSort = (setter) => (field) => {
     setter((prev) => ({ field, dir: prev.field === field && prev.dir === "asc" ? "desc" : "asc" }));
+  };
+  // Task headers cycle asc -> desc -> unsorted, so the manual drag order is reachable again.
+  const toggleTaskSort = (field) => {
+    setTaskSort((prev) =>
+      prev.field !== field ? { field, dir: "asc" }
+        : prev.dir === "asc" ? { field, dir: "desc" }
+          : { field: null, dir: "asc" });
   };
   const sortArr = (arr, s, getVal) => {
     if (!s.field) return arr;
@@ -403,6 +424,8 @@ export default function App() {
     return true;
   });
   const sTasks = sortArr(fTasks, taskSort, taskVal);
+  // Manual ordering is meaningless while a column sort overrides it, so drag is off then.
+  const canDragTasks = !taskSort.field;
 
   // Filter + sort projects
   const fProjs = projects.filter((p) => {
@@ -482,11 +505,11 @@ export default function App() {
             {/* Header row */}
             <div style={S.row}>
               <div style={{ ...S.cellFixed, width: COL.grip }} />
-              <SortHeader label="Project" field="project" style={{ flex: COL.project }} sortField={taskSort.field} sortDir={taskSort.dir} onSort={toggleSort(setTaskSort)} />
-              <SortHeader label="Number" field="number" style={{ width: COL.number }} sortField={taskSort.field} sortDir={taskSort.dir} onSort={toggleSort(setTaskSort)} />
-              <SortHeader label="Client" field="client" style={{ flex: COL.client }} sortField={taskSort.field} sortDir={taskSort.dir} onSort={toggleSort(setTaskSort)} />
-              <SortHeader label="Date" field="date" style={{ width: COL.date }} sortField={taskSort.field} sortDir={taskSort.dir} onSort={toggleSort(setTaskSort)} />
-              <SortHeader label="Task" field="description" style={{ flex: COL.task }} sortField={taskSort.field} sortDir={taskSort.dir} onSort={toggleSort(setTaskSort)} />
+              <SortHeader label="Project" field="project" style={{ flex: COL.project }} sortField={taskSort.field} sortDir={taskSort.dir} onSort={toggleTaskSort} />
+              <SortHeader label="Number" field="number" style={{ width: COL.number }} sortField={taskSort.field} sortDir={taskSort.dir} onSort={toggleTaskSort} />
+              <SortHeader label="Client" field="client" style={{ flex: COL.client }} sortField={taskSort.field} sortDir={taskSort.dir} onSort={toggleTaskSort} />
+              <SortHeader label="Date" field="date" style={{ width: COL.date }} sortField={taskSort.field} sortDir={taskSort.dir} onSort={toggleTaskSort} />
+              <SortHeader label="Task" field="description" style={{ flex: COL.task }} sortField={taskSort.field} sortDir={taskSort.dir} onSort={toggleTaskSort} />
               <div style={{ ...S.cellFixed, width: COL.actions }} />
             </div>
 
@@ -505,11 +528,11 @@ export default function App() {
 
             {/* Task list */}
             <div style={S.list}>
-              {sTasks.map((t, i) => (
-                <TaskRow key={t.id} task={t} index={i} projects={projects}
+              {sTasks.map((t) => (
+                <TaskRow key={t.id} task={t} projects={projects} canDrag={canDragTasks}
                   onComplete={completeTask} onEdit={setEditingTask} onToggleHold={toggleHold} onTogglePriority={togglePriority}
                   onOpenNotes={openNotes} noteCount={noteCountMap[t.id] || 0}
-                  onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop} />
+                  onDragStart={onDragStart} onDrop={onDrop} />
               ))}
               {sTasks.length === 0 && <div style={S.empty}>{hasTF ? "No tasks match filters" : "No tasks yet"}</div>}
             </div>
