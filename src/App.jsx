@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { supabase, onError } from "./lib/supabase.js";
+import { supabase, auth, onError } from "./lib/supabase.js";
+import SignIn from "./pages/SignIn.jsx";
 import logoIkbi from "./assets/logo-ikbi.svg";
 import TaskBoard from "./pages/TaskBoard.jsx";
 import TimeSheet from "./pages/TimeSheet.jsx";
@@ -25,10 +26,19 @@ export default function App() {
   const [page, setPage] = useState(initialPage);
   const [projects, setProjects] = useState([]);
   const [error, setError] = useState(null);
+  const [session, setSession] = useState(undefined); // undefined = still checking
 
   useEffect(() => {
-    supabase.from("projects").select("order=name.asc").then(setProjects).catch(() => {});
+    auth.getSession().then(({ data }) => setSession(data.session));
+    const { data: { subscription } } = auth.onAuthStateChange((_event, s) => setSession(s));
+    return () => subscription.unsubscribe();
   }, []);
+
+  const userId = session?.user?.id;
+  useEffect(() => {
+    if (!userId) { setProjects([]); return; }
+    supabase.from("projects").select("order=name.asc").then(setProjects).catch(() => {});
+  }, [userId]);
 
   useEffect(() => onError((msg) => setError(msg)), []);
   useEffect(() => {
@@ -43,6 +53,9 @@ export default function App() {
     if (p === "dashboard") url.searchParams.delete("page"); else url.searchParams.set("page", p);
     window.history.replaceState(null, "", url);
   };
+
+  if (session === undefined) return null;
+  if (!session) return <SignIn />;
 
   return (
     <>
@@ -59,6 +72,7 @@ export default function App() {
             {PAGES.map(([key, label]) => (
               <button key={key} onClick={() => go(key)} className={`nav-link${page === key ? " active" : ""}`}>{label}</button>
             ))}
+            <button onClick={() => auth.signOut()} className="nav-link" title={session.user.email}>Sign out</button>
           </nav>
         </div>
       </header>
