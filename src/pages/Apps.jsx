@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { PageHead } from "../components/ui.jsx";
 
 // ─── APP DIRECTORY ─────────────────────────────────────────────────────────
 // Links to every IKB app and site. URLs taken from `netlify sites:list` (07/10/2026).
@@ -40,37 +41,31 @@ const APPS = [
 const GROUPS = ["Products", "Tools", "Websites", "Not deployed"];
 const GITHUB = "https://github.com/neilwilliams99/";
 
-export default function Apps({ S, C }) {
+export default function Apps() {
   const [filter, setFilter] = useState("");
   const q = filter.trim().toLowerCase();
   const shown = APPS.filter((a) => !q || `${a.name} ${a.desc} ${a.url || ""}`.toLowerCase().includes(q));
 
-  const card = { background: C.white, border: `1px solid ${C.border}`, borderRadius: 8, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 6 };
-  const link = { color: C.teal, fontSize: 12, fontWeight: 600, textDecoration: "none", wordBreak: "break-all" };
-
   return (
     <>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 16 }}>
-        <h1 style={{ ...S.h1, marginBottom: 0 }}>Apps</h1>
-        <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter apps" style={{ ...S.input, maxWidth: 260 }} />
-      </div>
+      <PageHead eyebrow="app_directory" title="Apps">
+        <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter apps" className="input" style={{ width: 240 }} />
+      </PageHead>
 
       {GROUPS.map((g) => {
         const items = shown.filter((a) => a.group === g);
         if (!items.length) return null;
         return (
-          <section key={g} style={{ marginBottom: 24 }}>
-            <div style={{ ...S.colHeader, marginBottom: 8 }}>{g}</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
+          <section key={g} style={{ marginBottom: 28 }}>
+            <div className="section-title">{g}<span style={{ color: "var(--text-muted)" }}>{items.length}</span></div>
+            <div className="app-grid">
               {items.map((a) => (
-                <div key={a.name} style={card}>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: C.grey }}>
-                    {a.url ? <a href={a.url} target="_blank" rel="noreferrer" style={{ color: "inherit", textDecoration: "none" }}>{a.name}</a> : a.name}
-                  </div>
-                  <div style={{ fontSize: 13, color: C.text, flex: 1 }}>{a.desc}</div>
-                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                    {a.url && <a href={a.url} target="_blank" rel="noreferrer" style={link}>{a.url.replace(/^https:\/\//, "")}</a>}
-                    {a.repo && <a href={GITHUB + a.repo} target="_blank" rel="noreferrer" style={{ ...link, color: C.textMuted, fontWeight: 500 }}>GitHub</a>}
+                <div key={a.name} className="app-card">
+                  {a.url ? <a href={a.url} target="_blank" rel="noreferrer" className="name">{a.name}</a> : <span className="name">{a.name}</span>}
+                  <div className="desc">{a.desc}</div>
+                  <div className="links">
+                    {a.url && <a href={a.url} target="_blank" rel="noreferrer">{a.url.replace(/^https:\/\//, "")}</a>}
+                    {a.repo && <a href={GITHUB + a.repo} target="_blank" rel="noreferrer" className="repo">github</a>}
                   </div>
                 </div>
               ))}
@@ -78,7 +73,7 @@ export default function Apps({ S, C }) {
           </section>
         );
       })}
-      {shown.length === 0 && <div style={S.empty}>No apps match filter</div>}
+      {shown.length === 0 && <div className="empty">no apps match filter</div>}
     </>
   );
 }
