@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import Reports from "./Reports.jsx";
+import Apps from "./Apps.jsx";
 
 // ─── CONFIG ────────────────────────────────────────────────────────────────
 const SUPABASE_URL = "https://dgdpiaqabdfsgwcpxuvx.supabase.co";
@@ -451,7 +452,7 @@ export default function App() {
             <span style={S.logoSub}>Tasks</span>
           </div>
           <div style={S.navLinks}>
-            {[["dashboard", "Task Board"], ["timesheet", "Time Sheet"], ["reports", "Reports"], ["projects", "Project Library"]].map(([pg, label]) => (
+            {[["dashboard", "Task Board"], ["timesheet", "Time Sheet"], ["reports", "Reports"], ["projects", "Project Library"], ["apps", "Apps"]].map(([pg, label]) => (
               <button key={pg} onClick={() => setPage(pg)} style={page === pg ? S.navActive : S.navLink}>
                 {label}
               </button>
@@ -644,6 +645,9 @@ export default function App() {
         {page === "reports" && (
           <Reports supabase={supabase} projects={projects} S={S} />
         )}
+
+        {/* ═══ APPS ═══ */}
+        {page === "apps" && <Apps S={S} C={C} />}
 
         {/* ═══ PROJECT LIBRARY ═══ */}
         {page === "projects" && (
