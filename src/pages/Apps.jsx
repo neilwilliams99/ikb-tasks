@@ -22,6 +22,7 @@ const APPS = [
 
   // Tools
   { name: "Anchor Group Calculator", group: "Tools", url: "https://cast-in-anchors.netlify.app", repo: "cast-in-anchors", desc: "Calculator for groups of cast-in anchors." },
+  { name: "Crane Base Actions", group: "Tools", url: "https://crane-base-actions.netlify.app", repo: "crane-base", desc: "Tower crane base reactions to AS 1418.4 Table 2.4.3 factored leg loads, plus SpaceGass node load and combination tables." },
   { name: "Hazard Tool", group: "Tools", url: "https://hazard-tool.netlify.app", repo: "hazard-tool", desc: "Site wind parameters from Revolutio's Hazard API." },
   { name: "Concrete Pressure", group: "Tools", url: "https://concrete-pressure.netlify.app", repo: "concrete_pressure", desc: "Concrete pressure calculator (repo not cloned locally)." },
   { name: "IKB Tasks", group: "Tools", url: "https://ikbtasks.netlify.app", repo: "ikb-tasks", desc: "This app: tasks, time sheets and reports." },
