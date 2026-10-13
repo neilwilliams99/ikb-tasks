@@ -3,7 +3,7 @@ import { supabase } from "../lib/supabase.js";
 import { formatStamp, has } from "../lib/format.js";
 import { SortHeader, nextSort, sortBy, PageHead, Modal, FilterInput } from "../components/ui.jsx";
 
-const COL = { name: 2, number: 1, client: 1, actions: 150 };
+const COL = { name: 2, number: 1, client: 1, actions: 132 };
 const NO_FILTERS = { name: "", number: "", client: "" };
 
 // "No Project" is the catch-all every loose task and time entry hangs off, so

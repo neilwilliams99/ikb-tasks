@@ -3,7 +3,7 @@ import { supabase } from "../lib/supabase.js";
 import { formatDate, formatStamp, today, money, num, has } from "../lib/format.js";
 import { SearchableDropdown, SortHeader, nextSort, sortBy, PageHead, Modal, FilterInput } from "../components/ui.jsx";
 
-const COL = { project: 1.2, number: 76, client: 0.6, date: 84, desc: 1.6, units: 64, rate: 72, total: 96, actions: 90 };
+const COL = { project: 1.2, number: 76, client: 0.6, date: 84, desc: 1.6, units: 64, rate: 72, total: 96, actions: 120 };
 const NO_FILTERS = { project: "", number: "", client: "", date: "", description: "" };
 
 // `projects` is every project, so an entry against an archived project still

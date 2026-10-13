@@ -4,7 +4,7 @@ import { formatDate, formatStamp, today, has } from "../lib/format.js";
 import { SearchableDropdown, SortHeader, nextSort, sortBy, PageHead, Modal, FilterInput } from "../components/ui.jsx";
 
 // Column widths — shared across header, filter, entry and data rows
-const COL = { project: 1.5, number: 80, client: 0.7, date: 96, task: 2, actions: 210 };
+const COL = { project: 1.5, number: 80, client: 0.7, date: 96, task: 2, actions: 232 };
 const NO_FILTERS = { project: "", number: "", client: "", date: "", description: "" };
 const ignore = () => {}; // errors are already shown by the supabase toast
 
