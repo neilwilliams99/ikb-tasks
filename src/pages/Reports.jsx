@@ -46,7 +46,9 @@ function emptyForm() {
   };
 }
 
-export default function Reports({ projects }) {
+// `projects` is every project, so a report already written against an archived
+// one still shows its name. `pickable` leaves archived ones out of the picker.
+export default function Reports({ projects, pickable }) {
   const [view, setView] = useState("library"); // "library" | "form"
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -481,7 +483,7 @@ export default function Reports({ projects }) {
             <div className="grid-2">
               <div className="field">
                 <label>Project <span className="hint">from library</span></label>
-                <SearchableDropdown options={projects} value={projects.find((p) => p.id === form.project_id) || null} onChange={selectProject} />
+                <SearchableDropdown options={pickable} value={projects.find((p) => p.id === form.project_id) || null} onChange={selectProject} />
               </div>
               <div className="field"><label>IKB reference</label>
                 <input value={form.ikb_reference} onChange={(e) => updateField("ikb_reference", e.target.value)} className="input" /></div>
