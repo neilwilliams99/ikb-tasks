@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabase.js";
-import { formatDate, today, has } from "../lib/format.js";
+import { formatDate, formatStamp, today, has } from "../lib/format.js";
 import { SearchableDropdown, SortHeader, nextSort, sortBy, PageHead, Modal, FilterInput } from "../components/ui.jsx";
 
 // Column widths — shared across header, filter, entry and data rows
@@ -8,7 +8,10 @@ const COL = { project: 1.5, number: 80, client: 0.7, date: 96, task: 2, actions:
 const NO_FILTERS = { project: "", number: "", client: "", date: "", description: "" };
 const ignore = () => {}; // errors are already shown by the supabase toast
 
-export default function TaskBoard({ projects }) {
+// `projects` is every project, used to show a task's project name even once
+// that project has been archived. `pickable` leaves the archived ones out, so
+// they cannot be chosen for new or edited tasks.
+export default function TaskBoard({ projects, pickable }) {
   const [tasks, setTasks] = useState([]);
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -21,9 +24,10 @@ export default function TaskBoard({ projects }) {
   const [notesFor, setNotesFor] = useState(null);
   const [sort, setSort] = useState({ field: null, dir: "asc" });
   const [filters, setFilters] = useState(NO_FILTERS);
+  const [showDone, setShowDone] = useState(false);
 
-  const dragFrom = useRef(null);
-  const [dragOver, setDragOver] = useState(null);
+  const dragFrom = useRef(null);                  // task id being dragged, not a row index
+  const [dragOver, setDragOver] = useState(null); // task id being hovered
 
   useEffect(() => {
     Promise.all([
@@ -35,6 +39,9 @@ export default function TaskBoard({ projects }) {
   const projectOf = (t) => projects.find((p) => p.id === t.project_id);
   const noteCount = {};
   notes.forEach((n) => { if (!n.checked) noteCount[n.task_id] = (noteCount[n.task_id] || 0) + 1; });
+
+  const open = tasks.filter((t) => !t.completed_at);
+  const doneCount = tasks.length - open.length;
 
   // ── CRUD ──
   const addTask = async () => {
@@ -58,7 +65,15 @@ export default function TaskBoard({ projects }) {
     if (await patch(t, { project_id: t.project_id, due_date: t.due_date || null, description: t.description.trim() })) setEditing(null);
   };
 
-  const complete = async (task) => {
+  // Done and Restore are the same stamp, set and cleared. Status notes are
+  // deliberately left alone, so a restored task comes back with its history.
+  const complete = (task) => patch(task, { completed_at: new Date().toISOString() });
+  const restore = (task) => patch(task, { completed_at: null });
+
+  // The only hard delete left, and only reachable from the completed view.
+  // task_notes.task_id references tasks.id, so the notes have to go first.
+  const destroy = async (task) => {
+    if (!window.confirm(`Permanently delete this task and its status notes?\n\n${task.description}\n\nThis cannot be undone.`)) return;
     try {
       await supabase.from("task_notes").deleteWhere(`task_id=eq.${task.id}`);
       await supabase.from("tasks").delete(task.id);
@@ -86,27 +101,38 @@ export default function TaskBoard({ projects }) {
     return { project: p?.name, number: p?.number, client: p?.client, date: t.due_date, description: t.description }[f];
   };
   const shown = sortBy(
-    tasks.filter((t) => Object.keys(filters).every((f) => has(f === "date" ? formatDate(val(t, f)) : val(t, f), filters[f]))),
+    (showDone ? tasks : open).filter((t) => Object.keys(filters).every((f) => has(f === "date" ? formatDate(val(t, f)) : val(t, f), filters[f]))),
     sort, val,
   );
   const hasFilters = Object.values(filters).some(Boolean);
-  const canDrag = !sort.field && !hasFilters;
+  // Reordering only makes sense against the full open list in its stored order.
+  const canDrag = !sort.field && !hasFilters && !showDone;
 
-  // ── Drag to reorder (only on the unsorted, unfiltered list) ──
-  const onDrop = async (toIndex) => {
-    const from = dragFrom.current;
+  // ── Drag to reorder ──
+  // Rows are identified by id, not by row position: the rendered list is a
+  // subset of `tasks` once completed tasks are hidden, so row positions do not
+  // line up with the positions in `tasks` that sort_order is numbered from.
+  const onDrop = async (toId) => {
+    const fromId = dragFrom.current;
     dragFrom.current = null; setDragOver(null);
-    if (!canDrag || from === null || from === toIndex) return;
+    if (!canDrag || fromId === null || fromId === toId) return;
+    const from = tasks.findIndex((t) => t.id === fromId);
+    const to = tasks.findIndex((t) => t.id === toId);
+    if (from === -1 || to === -1) return;
+
     const items = [...tasks];
     const [moved] = items.splice(from, 1);
-    items.splice(toIndex, 0, moved);
+    items.splice(to, 0, moved);
     const reordered = items.map((t, i) => ({ ...t, sort_order: i }));
-    const changed = reordered.filter((t, i) => tasks.find((o) => o.id === t.id)?.sort_order !== i);
+
+    const before = new Map(tasks.map((t) => [t.id, t.sort_order]));
+    const changed = reordered.filter((t) => before.get(t.id) !== t.sort_order);
+    const previous = tasks;
     setTasks(reordered);
     try {
       await Promise.all(changed.map((t) => supabase.from("tasks").update({ sort_order: t.sort_order }, t.id)));
     } catch {
-      setTasks(tasks); // put it back if the save failed
+      setTasks(previous); // put it back if the save failed
     }
   };
 
@@ -116,14 +142,18 @@ export default function TaskBoard({ projects }) {
     <>
       <PageHead eyebrow="task_board" title="Task Board">
         <span className="mono" style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-          {tasks.length} task{tasks.length === 1 ? "" : "s"} · {tasks.filter((t) => t.priority).length} priority · {tasks.filter((t) => t.on_hold).length} on hold
+          {open.length} open · {open.filter((t) => t.priority).length} priority · {open.filter((t) => t.on_hold).length} on hold
         </span>
+        <label className={`toggle view${showDone ? " on" : ""}`}>
+          <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} />
+          Show completed{doneCount ? ` (${doneCount})` : ""}
+        </label>
       </PageHead>
 
       {/* New task */}
       <div className="row entry">
         <div style={{ width: 24, flex: "none" }} />
-        <div style={{ flex: COL.project, minWidth: 0 }}><SearchableDropdown options={projects} value={selProject} onChange={setSelProject} /></div>
+        <div style={{ flex: COL.project, minWidth: 0 }}><SearchableDropdown options={pickable} value={selProject} onChange={setSelProject} /></div>
         <div style={{ width: COL.number, flex: "none" }}><input readOnly value={selProject?.number || ""} placeholder="Number" className="input" /></div>
         <div style={{ flex: COL.client, minWidth: 0 }}><input readOnly value={selProject?.client || ""} placeholder="Client" className="input" /></div>
         <div style={{ width: COL.date + 30, flex: "none" }}><input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} className="input" /></div>
@@ -158,44 +188,59 @@ export default function TaskBoard({ projects }) {
           </div>
         </div>
 
-        {shown.map((t, i) => {
+        {shown.map((t) => {
           const p = projectOf(t);
-          const overdue = t.due_date && t.due_date < now && !t.on_hold;
+          const done = !!t.completed_at;
+          const overdue = t.due_date && t.due_date < now && !t.on_hold && !done;
           return (
             <div key={t.id}
-              className={`row data${t.on_hold ? " hold" : ""}${t.priority ? " priority" : ""}${dragOver === i ? " drop-target" : ""}`}
+              className={`row data${done ? " done" : ""}${t.on_hold && !done ? " hold" : ""}${t.priority && !done ? " priority" : ""}${dragOver === t.id ? " drop-target" : ""}`}
               draggable={canDrag}
-              onDragStart={(e) => { dragFrom.current = i; e.dataTransfer.effectAllowed = "move"; }}
-              onDragOver={(e) => { if (canDrag) { e.preventDefault(); setDragOver(i); } }}
-              onDragLeave={() => setDragOver((d) => (d === i ? null : d))}
+              onDragStart={(e) => { dragFrom.current = t.id; e.dataTransfer.effectAllowed = "move"; }}
+              onDragOver={(e) => { if (canDrag) { e.preventDefault(); setDragOver(t.id); } }}
+              onDragLeave={() => setDragOver((d) => (d === t.id ? null : d))}
               onDragEnd={() => { dragFrom.current = null; setDragOver(null); }}
-              onDrop={(e) => { e.preventDefault(); onDrop(i); }}>
-              <div className={`grip${canDrag ? "" : " disabled"}`} title={canDrag ? "Drag to reorder" : "Clear sorting and filters to reorder"}>{"⠇"}</div>
+              onDrop={(e) => { e.preventDefault(); onDrop(t.id); }}>
+              <div className={`grip${canDrag ? "" : " disabled"}`} title={canDrag ? "Drag to reorder" : "Clear sorting, filters and Show completed to reorder"}>{"⠇"}</div>
               <div className="cell strong" style={{ flex: COL.project }}>{p?.name || "—"}</div>
               <div className="cell fixed mono" style={{ width: COL.number }}>{p?.number || "—"}</div>
               <div className="cell muted" style={{ flex: COL.client }}>{p?.client || "—"}</div>
               <div className={`cell fixed mono${overdue ? " overdue" : ""}`} style={{ width: COL.date }} title={overdue ? "Overdue" : undefined}>{formatDate(t.due_date) || "—"}</div>
               <div className="cell clickable" style={{ flex: COL.task }} onClick={() => setNotesFor(t)} title="Status notes">
                 <span className="cell">{t.description}</span>
+                {done && <span className="mono" style={{ flex: "none", fontSize: "0.68rem", color: "var(--text-muted)" }}>done {formatStamp(t.completed_at)}</span>}
                 {noteCount[t.id] > 0 && <span className="badge">{noteCount[t.id]}</span>}
               </div>
               <div className="cell actions" style={{ width: COL.actions }}>
-                <button onClick={() => patch(t, { priority: !t.priority })} className={`btn btn-sm btn-danger${t.priority ? " on" : ""}`}>Priority</button>
-                <button onClick={() => patch(t, { on_hold: !t.on_hold })} className={`btn btn-sm btn-ghost${t.on_hold ? " on" : ""}`}>Hold</button>
-                <button onClick={() => setEditing({ ...t })} className="btn btn-sm btn-outline">Edit</button>
-                <button onClick={() => complete(t)} className="btn btn-sm btn-primary" title="Mark done and remove">Done</button>
+                {done ? (
+                  <>
+                    <button onClick={() => restore(t)} className="btn btn-sm btn-outline">Restore</button>
+                    <button onClick={() => destroy(t)} className="btn btn-danger btn-icon" aria-label="Delete permanently" title="Delete permanently">{"✕"}</button>
+                  </>
+                ) : (
+                  <>
+                    <button onClick={() => patch(t, { priority: !t.priority })} className={`btn btn-sm btn-danger${t.priority ? " on" : ""}`}>Priority</button>
+                    <button onClick={() => patch(t, { on_hold: !t.on_hold })} className={`btn btn-sm btn-ghost${t.on_hold ? " on" : ""}`}>Hold</button>
+                    <button onClick={() => setEditing({ ...t })} className="btn btn-sm btn-outline">Edit</button>
+                    <button onClick={() => complete(t)} className="btn btn-sm btn-primary" title="Mark done and hide">Done</button>
+                  </>
+                )}
               </div>
             </div>
           );
         })}
-        {shown.length === 0 && <div className="empty">{loading ? "loading…" : hasFilters ? "no tasks match filters" : "no tasks yet"}</div>}
+        {shown.length === 0 && (
+          <div className="empty">
+            {loading ? "loading…" : hasFilters ? "no tasks match filters" : showDone ? "no tasks yet" : doneCount ? "nothing open — tick Show completed" : "no tasks yet"}
+          </div>
+        )}
       </div>
 
       {editing && (
         <Modal title="Edit task" eyebrow="edit_task" onClose={() => setEditing(null)}>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="field"><label>Project</label>
-              <SearchableDropdown options={projects} value={projects.find((p) => p.id === editing.project_id) || null} onChange={(p) => setEditing({ ...editing, project_id: p.id })} />
+              <SearchableDropdown options={pickable} value={projects.find((p) => p.id === editing.project_id) || null} onChange={(p) => setEditing({ ...editing, project_id: p.id })} />
             </div>
             <div className="field"><label>Due date</label>
               <input type="date" value={editing.due_date || ""} onChange={(e) => setEditing({ ...editing, due_date: e.target.value })} className="input" />

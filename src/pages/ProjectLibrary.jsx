@@ -1,10 +1,16 @@
 import { useState } from "react";
 import { supabase } from "../lib/supabase.js";
-import { has } from "../lib/format.js";
+import { formatStamp, has } from "../lib/format.js";
 import { SortHeader, nextSort, sortBy, PageHead, Modal, FilterInput } from "../components/ui.jsx";
 
-const COL = { name: 2, number: 1, client: 1, actions: 90 };
+const COL = { name: 2, number: 1, client: 1, actions: 150 };
 const NO_FILTERS = { name: "", number: "", client: "" };
+
+// "No Project" is the catch-all every loose task and time entry hangs off, so
+// it must always stay pickable. Matched on its project number rather than its
+// id, which is what identifies it everywhere else.
+const KEEP_ACTIVE_NUMBER = "9999";
+const isProtected = (p) => (p.number || "").trim() === KEEP_ACTIVE_NUMBER;
 
 export default function ProjectLibrary({ projects, setProjects }) {
   const [name, setName] = useState("");
@@ -13,6 +19,10 @@ export default function ProjectLibrary({ projects, setProjects }) {
   const [sort, setSort] = useState({ field: null, dir: "asc" });
   const [filters, setFilters] = useState(NO_FILTERS);
   const [editing, setEditing] = useState(null);
+  const [showArchived, setShowArchived] = useState(false);
+
+  const active = projects.filter((p) => !p.archived_at);
+  const archivedCount = projects.length - active.length;
 
   const add = async () => {
     if (!name.trim()) return;
@@ -29,10 +39,21 @@ export default function ProjectLibrary({ projects, setProjects }) {
     setEditing(null);
   };
 
-  // A project can only be deleted once nothing else refers to it, so time
-  // entries and inspection reports are never orphaned. Open tasks (and their
-  // notes) are deleted with it after confirmation.
-  const remove = async (p) => {
+  const patch = async (p, fields) => {
+    const [updated] = await supabase.from("projects").update(fields, p.id).catch(() => []);
+    if (updated) setProjects((prev) => prev.map((x) => (x.id === p.id ? { ...x, ...updated } : x)));
+  };
+
+  // Archiving hides a project and takes it out of the pickers, but every task,
+  // time entry and report already pointing at it keeps working and still shows
+  // its name. Unarchive is the same stamp cleared.
+  const archive = (p) => { if (!isProtected(p)) patch(p, { archived_at: new Date().toISOString() }); };
+  const unarchive = (p) => patch(p, { archived_at: null });
+
+  // Permanent delete, only reachable from the archived view. A project can only
+  // go once nothing else refers to it, so time entries and inspection reports
+  // are never orphaned. Its tasks (and their notes) go with it, on confirmation.
+  const destroy = async (p) => {
     try {
       const [ts, reports, tasks] = await Promise.all([
         supabase.from("timesheet").count(`project_id=eq.${p.id}`),
@@ -40,10 +61,12 @@ export default function ProjectLibrary({ projects, setProjects }) {
         supabase.query("tasks", { filters: `?select=id&project_id=eq.${p.id}` }),
       ]);
       if (ts || reports) {
-        window.alert(`"${p.name}" can't be deleted: it has ${ts} time entr${ts === 1 ? "y" : "ies"} and ${reports} inspection report${reports === 1 ? "" : "s"}.`);
+        window.alert(`"${p.name}" can't be deleted: it has ${ts} time entr${ts === 1 ? "y" : "ies"} and ${reports} inspection report${reports === 1 ? "" : "s"}.\n\nIt stays archived, which keeps it out of the way without breaking them.`);
         return;
       }
-      const msg = tasks.length ? `Delete "${p.name}" and its ${tasks.length} open task${tasks.length === 1 ? "" : "s"}?` : `Delete "${p.name}"?`;
+      const msg = tasks.length
+        ? `Permanently delete "${p.name}" and its ${tasks.length} task${tasks.length === 1 ? "" : "s"}?\n\nThis cannot be undone.`
+        : `Permanently delete "${p.name}"?\n\nThis cannot be undone.`;
       if (!window.confirm(msg)) return;
       if (tasks.length) {
         const ids = tasks.map((t) => t.id).join(",");
@@ -55,7 +78,7 @@ export default function ProjectLibrary({ projects, setProjects }) {
     } catch { /* shown by toast */ }
   };
 
-  const shown = sortBy(projects.filter((p) => Object.keys(filters).every((f) => has(p[f], filters[f]))), sort, (p, f) => p[f]);
+  const shown = sortBy((showArchived ? projects : active).filter((p) => Object.keys(filters).every((f) => has(p[f], filters[f]))), sort, (p, f) => p[f]);
   const hasFilters = Object.values(filters).some(Boolean);
   const onSort = (f) => setSort((s) => nextSort(s, f));
   const enter = (e) => { if (e.key === "Enter") add(); };
@@ -63,7 +86,11 @@ export default function ProjectLibrary({ projects, setProjects }) {
   return (
     <>
       <PageHead eyebrow="project_library" title="Project Library">
-        <span className="mono" style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{projects.length} projects</span>
+        <span className="mono" style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{active.length} active</span>
+        <label className={`toggle view${showArchived ? " on" : ""}`}>
+          <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
+          Show archived{archivedCount ? ` (${archivedCount})` : ""}
+        </label>
       </PageHead>
 
       <div className="row entry">
@@ -90,18 +117,38 @@ export default function ProjectLibrary({ projects, setProjects }) {
             {hasFilters && <button onClick={() => setFilters(NO_FILTERS)} className="btn-link">clear</button>}
           </div>
         </div>
-        {shown.map((p) => (
-          <div key={p.id} className="row data">
-            <div className="cell strong" style={{ flex: COL.name }}>{p.name}</div>
-            <div className="cell mono" style={{ flex: COL.number }}>{p.number}</div>
-            <div className="cell muted" style={{ flex: COL.client }}>{p.client}</div>
-            <div className="cell actions" style={{ width: COL.actions }}>
-              <button onClick={() => setEditing({ ...p })} className="btn btn-sm btn-outline">Edit</button>
-              <button onClick={() => remove(p)} className="btn btn-danger btn-icon" aria-label="Delete">{"✕"}</button>
+        {shown.map((p) => {
+          const archived = !!p.archived_at;
+          return (
+            <div key={p.id} className={`row data${archived ? " done" : ""}`}>
+              <div className="cell strong" style={{ flex: COL.name }}>
+                {p.name}
+                {archived && <span className="mono" style={{ marginLeft: 8, fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 400 }}>archived {formatStamp(p.archived_at)}</span>}
+              </div>
+              <div className="cell mono" style={{ flex: COL.number }}>{p.number}</div>
+              <div className="cell muted" style={{ flex: COL.client }}>{p.client}</div>
+              <div className="cell actions" style={{ width: COL.actions }}>
+                {archived ? (
+                  <>
+                    <button onClick={() => unarchive(p)} className="btn btn-sm btn-outline">Unarchive</button>
+                    <button onClick={() => destroy(p)} className="btn btn-danger btn-icon" aria-label="Delete permanently" title="Delete permanently">{"✕"}</button>
+                  </>
+                ) : (
+                  <>
+                    <button onClick={() => setEditing({ ...p })} className="btn btn-sm btn-outline">Edit</button>
+                    <button onClick={() => archive(p)} className="btn btn-sm btn-ghost" disabled={isProtected(p)}
+                      title={isProtected(p) ? `"${p.name}" is the catch-all project and can't be archived` : "Hide from the lists and pickers"}>Archive</button>
+                  </>
+                )}
+              </div>
             </div>
+          );
+        })}
+        {shown.length === 0 && (
+          <div className="empty">
+            {hasFilters ? "no projects match filters" : showArchived ? "no projects yet" : archivedCount ? "nothing active — tick Show archived" : "no projects yet"}
           </div>
-        ))}
-        {shown.length === 0 && <div className="empty">{hasFilters ? "no projects match filters" : "no projects yet"}</div>}
+        )}
       </div>
 
       {editing && (

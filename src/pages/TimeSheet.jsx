@@ -1,17 +1,20 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase.js";
-import { formatDate, today, money, num, has } from "../lib/format.js";
+import { formatDate, formatStamp, today, money, num, has } from "../lib/format.js";
 import { SearchableDropdown, SortHeader, nextSort, sortBy, PageHead, Modal, FilterInput } from "../components/ui.jsx";
 
 const COL = { project: 1.2, number: 76, client: 0.6, date: 84, desc: 1.6, units: 64, rate: 72, total: 96, actions: 90 };
 const NO_FILTERS = { project: "", number: "", client: "", date: "", description: "" };
 
-export default function TimeSheet({ projects }) {
+// `projects` is every project, so an entry against an archived project still
+// shows its name. `pickable` leaves archived ones out of the picker.
+export default function TimeSheet({ projects, pickable }) {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sort, setSort] = useState({ field: null, dir: "asc" });
   const [filters, setFilters] = useState(NO_FILTERS);
   const [editing, setEditing] = useState(null);
+  const [showDone, setShowDone] = useState(false);
 
   const [proj, setProj] = useState(null);
   const [date, setDate] = useState(today());
@@ -24,6 +27,8 @@ export default function TimeSheet({ projects }) {
   }, []);
 
   const projectOf = (e) => projects.find((p) => p.id === e.project_id);
+  const open = entries.filter((e) => !e.completed_at);
+  const doneCount = entries.length - open.length;
 
   const add = async () => {
     if (!proj || !desc.trim()) return;
@@ -44,8 +49,18 @@ export default function TimeSheet({ projects }) {
     setEditing(null);
   };
 
-  const remove = async (e) => {
-    if (!window.confirm(`Delete this time entry?\n\n${e.description}`)) return;
+  const patch = async (entry, fields) => {
+    const [updated] = await supabase.from("timesheet").update(fields, entry.id).catch(() => []);
+    if (updated) setEntries((prev) => prev.map((x) => (x.id === entry.id ? { ...x, ...updated } : x)));
+  };
+
+  // Complete and Restore are the same stamp, set and cleared.
+  const complete = (e) => patch(e, { completed_at: new Date().toISOString() });
+  const restore = (e) => patch(e, { completed_at: null });
+
+  // The only hard delete left, and only reachable from the completed view.
+  const destroy = async (e) => {
+    if (!window.confirm(`Permanently delete this time entry?\n\n${e.description}\n\nThis cannot be undone.`)) return;
     await supabase.from("timesheet").delete(e.id).then(() => setEntries((prev) => prev.filter((x) => x.id !== e.id))).catch(() => {});
   };
 
@@ -57,10 +72,12 @@ export default function TimeSheet({ projects }) {
     }[f];
   };
   const shown = sortBy(
-    entries.filter((e) => Object.keys(filters).every((f) => has(f === "date" ? formatDate(val(e, f)) : val(e, f), filters[f]))),
+    (showDone ? entries : open).filter((e) => Object.keys(filters).every((f) => has(f === "date" ? formatDate(val(e, f)) : val(e, f), filters[f]))),
     sort, val,
   );
   const hasFilters = Object.values(filters).some(Boolean);
+  // The totals follow what is on screen, same as they always have with the
+  // column filters — so they cover the open entries unless Show completed is on.
   const totalUnits = shown.reduce((s, e) => s + num(e.units), 0);
   const total = shown.reduce((s, e) => s + num(e.units) * num(e.rate), 0);
   const onSort = (f) => setSort((s) => nextSort(s, f));
@@ -68,11 +85,16 @@ export default function TimeSheet({ projects }) {
 
   return (
     <>
-      <PageHead eyebrow="time_sheet" title="Time Sheet" />
+      <PageHead eyebrow="time_sheet" title="Time Sheet">
+        <label className={`toggle view${showDone ? " on" : ""}`}>
+          <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} />
+          Show completed{doneCount ? ` (${doneCount})` : ""}
+        </label>
+      </PageHead>
 
       {/* New entry */}
       <div className="row entry">
-        <div style={{ flex: COL.project, minWidth: 0 }}><SearchableDropdown options={projects} value={proj} onChange={setProj} /></div>
+        <div style={{ flex: COL.project, minWidth: 0 }}><SearchableDropdown options={pickable} value={proj} onChange={setProj} /></div>
         <div style={{ width: COL.number, flex: "none" }}><input readOnly value={proj?.number || ""} placeholder="No." className="input" /></div>
         <div style={{ flex: COL.client, minWidth: 0 }}><input readOnly value={proj?.client || ""} placeholder="Client" className="input" /></div>
         <div style={{ width: COL.date + 46, flex: "none" }}><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input" /></div>
@@ -112,29 +134,46 @@ export default function TimeSheet({ projects }) {
 
         {shown.map((e) => {
           const p = projectOf(e);
+          const done = !!e.completed_at;
           return (
-            <div key={e.id} className="row data">
+            <div key={e.id} className={`row data${done ? " done" : ""}`}>
               <div className="cell strong" style={{ flex: COL.project }}>{p?.name || "—"}</div>
               <div className="cell fixed mono" style={{ width: COL.number }}>{p?.number || "—"}</div>
               <div className="cell muted" style={{ flex: COL.client }}>{p?.client || "—"}</div>
               <div className="cell fixed mono" style={{ width: COL.date }}>{formatDate(e.date) || "—"}</div>
-              <div className="cell" style={{ flex: COL.desc }} title={e.description}>{e.description}</div>
+              <div className="cell" style={{ flex: COL.desc }} title={done ? `${e.description} · completed ${formatStamp(e.completed_at)}` : e.description}>
+                {e.description}
+                {done && <span className="mono" style={{ marginLeft: 8, fontSize: "0.68rem", color: "var(--text-muted)" }}>done {formatStamp(e.completed_at)}</span>}
+              </div>
               <div className="cell fixed num" style={{ width: COL.units }}>{num(e.units)}</div>
               <div className="cell fixed num" style={{ width: COL.rate }}>{money(e.rate)}</div>
               <div className="cell fixed num accent" style={{ width: COL.total }}>{money(num(e.units) * num(e.rate))}</div>
               <div className="cell actions" style={{ width: COL.actions }}>
-                <button onClick={() => setEditing({ ...e })} className="btn btn-sm btn-outline">Edit</button>
-                <button onClick={() => remove(e)} className="btn btn-danger btn-icon" aria-label="Delete">{"✕"}</button>
+                {done ? (
+                  <>
+                    <button onClick={() => restore(e)} className="btn btn-sm btn-outline">Restore</button>
+                    <button onClick={() => destroy(e)} className="btn btn-danger btn-icon" aria-label="Delete permanently" title="Delete permanently">{"✕"}</button>
+                  </>
+                ) : (
+                  <>
+                    <button onClick={() => setEditing({ ...e })} className="btn btn-sm btn-outline">Edit</button>
+                    <button onClick={() => complete(e)} className="btn btn-sm btn-primary" title="Mark done and hide">Done</button>
+                  </>
+                )}
               </div>
             </div>
           );
         })}
-        {shown.length === 0 && <div className="empty">{loading ? "loading…" : hasFilters ? "no entries match filters" : "no time entries yet"}</div>}
+        {shown.length === 0 && (
+          <div className="empty">
+            {loading ? "loading…" : hasFilters ? "no entries match filters" : showDone ? "no time entries yet" : doneCount ? "nothing open — tick Show completed" : "no time entries yet"}
+          </div>
+        )}
 
         {shown.length > 0 && (
           <div className="row total">
             <div className="cell" style={{ flex: 1 }}>
-              Total <span className="mono" style={{ fontSize: "0.7rem", color: "var(--text-muted)", fontWeight: 400 }}>// {shown.length} entr{shown.length === 1 ? "y" : "ies"}{hasFilters ? " (filtered)" : ""}</span>
+              Total <span className="mono" style={{ fontSize: "0.7rem", color: "var(--text-muted)", fontWeight: 400 }}>// {shown.length} entr{shown.length === 1 ? "y" : "ies"}{hasFilters ? " (filtered)" : showDone ? " (incl. completed)" : doneCount ? " (open only)" : ""}</span>
             </div>
             <div className="cell fixed num" style={{ width: COL.units }}>{totalUnits}</div>
             <div style={{ width: COL.rate, flex: "none" }} />
@@ -148,7 +187,7 @@ export default function TimeSheet({ projects }) {
         <Modal title="Edit time entry" eyebrow="edit_entry" onClose={() => setEditing(null)}>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="field"><label>Project</label>
-              <SearchableDropdown options={projects} value={projects.find((p) => p.id === editing.project_id) || null} onChange={(p) => setEditing({ ...editing, project_id: p.id })} />
+              <SearchableDropdown options={pickable} value={projects.find((p) => p.id === editing.project_id) || null} onChange={(p) => setEditing({ ...editing, project_id: p.id })} />
             </div>
             <div className="field"><label>Date</label>
               <input type="date" value={editing.date || ""} onChange={(e) => setEditing({ ...editing, date: e.target.value })} className="input" />
