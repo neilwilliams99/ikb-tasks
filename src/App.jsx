@@ -40,6 +40,10 @@ export default function App() {
     supabase.from("projects").select("order=name.asc").then(setProjects).catch(() => {});
   }, [userId]);
 
+  // Archived projects stay loaded, so a task or entry against one still shows
+  // its name; they are only kept out of the pickers for new and edited rows.
+  const activeProjects = projects.filter((p) => !p.archived_at);
+
   useEffect(() => onError((msg) => setError(msg)), []);
   useEffect(() => {
     if (!error) return;
@@ -78,8 +82,8 @@ export default function App() {
       </header>
 
       <main className="content">
-        {page === "dashboard" && <TaskBoard projects={projects} />}
-        {page === "timesheet" && <TimeSheet projects={projects} />}
+        {page === "dashboard" && <TaskBoard projects={projects} pickable={activeProjects} />}
+        {page === "timesheet" && <TimeSheet projects={projects} pickable={activeProjects} />}
         {page === "reports" && <Reports projects={projects} />}
         {page === "projects" && <ProjectLibrary projects={projects} setProjects={setProjects} />}
         {page === "apps" && <Apps />}

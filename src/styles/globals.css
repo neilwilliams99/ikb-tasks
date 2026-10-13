@@ -298,3 +298,8 @@ footer.page-foot a { color: var(--teal); text-decoration: none; }
 
 /* Scrollbars */
 * { scrollbar-width: thin; scrollbar-color: var(--dark-500) transparent; }
+
+/* completed / archived rows, and the view toggles that reveal them */
+.row.done { opacity: 0.45; }
+.toggle.view.on { color: var(--teal); }
+.toggle.view.on input { accent-color: var(--teal); }

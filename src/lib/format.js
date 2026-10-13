@@ -20,3 +20,13 @@ export const num = (x) => {
 
 // Case-insensitive "contains" used by all the column filters
 export const has = (value, q) => !q || String(value ?? "").toLowerCase().includes(q.toLowerCase());
+
+// ISO timestamp → dd/mm/yy in local time. Unlike formatDate this takes a full
+// timestamptz, so it must not be sliced to 10 chars first: that would read the
+// UTC date and show the wrong day for anything stamped late in the evening.
+export function formatStamp(ts) {
+  if (!ts) return "";
+  const dt = new Date(ts);
+  if (isNaN(dt)) return "";
+  return dt.toLocaleDateString("en-AU", { day: "2-digit", month: "2-digit", year: "2-digit" });
+}
