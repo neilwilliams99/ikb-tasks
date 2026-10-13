@@ -84,7 +84,7 @@ export default function App() {
       <main className="content">
         {page === "dashboard" && <TaskBoard projects={projects} pickable={activeProjects} />}
         {page === "timesheet" && <TimeSheet projects={projects} pickable={activeProjects} />}
-        {page === "reports" && <Reports projects={projects} />}
+        {page === "reports" && <Reports projects={projects} pickable={activeProjects} />}
         {page === "projects" && <ProjectLibrary projects={projects} setProjects={setProjects} />}
         {page === "apps" && <Apps />}
       </main>
