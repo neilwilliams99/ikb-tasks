@@ -71,15 +71,17 @@ export default function TimeSheet({ projects, pickable }) {
       units: num(e.units), rate: num(e.rate), total: num(e.units) * num(e.rate),
     }[f];
   };
-  const shown = sortBy(
-    (showDone ? entries : open).filter((e) => Object.keys(filters).every((f) => has(f === "date" ? formatDate(val(e, f)) : val(e, f), filters[f]))),
-    sort, val,
-  );
+  const matches = (e) => Object.keys(filters).every((f) => has(f === "date" ? formatDate(val(e, f)) : val(e, f), filters[f]));
+  const shown = sortBy((showDone ? entries : open).filter(matches), sort, val);
   const hasFilters = Object.values(filters).some(Boolean);
-  // The totals follow what is on screen, same as they always have with the
-  // column filters — so they cover the open entries unless Show completed is on.
-  const totalUnits = shown.reduce((s, e) => s + num(e.units), 0);
-  const total = shown.reduce((s, e) => s + num(e.units) * num(e.rate), 0);
+  // The totals count completed entries whether or not they are listed, so
+  // marking an entry done never moves the figure. They still follow the column
+  // filters, which is what they have always done. `counted` is therefore a
+  // superset of `shown` whenever something completed is hidden.
+  const counted = entries.filter(matches);
+  const countedDone = counted.filter((e) => e.completed_at).length;
+  const totalUnits = counted.reduce((s, e) => s + num(e.units), 0);
+  const total = counted.reduce((s, e) => s + num(e.units) * num(e.rate), 0);
   const onSort = (f) => setSort((s) => nextSort(s, f));
   const setF = (k) => (v) => setFilters({ ...filters, [k]: v });
 
@@ -170,10 +172,10 @@ export default function TimeSheet({ projects, pickable }) {
           </div>
         )}
 
-        {shown.length > 0 && (
+        {counted.length > 0 && (
           <div className="row total">
             <div className="cell" style={{ flex: 1 }}>
-              Total <span className="mono" style={{ fontSize: "0.7rem", color: "var(--text-muted)", fontWeight: 400 }}>// {shown.length} entr{shown.length === 1 ? "y" : "ies"}{hasFilters ? " (filtered)" : showDone ? " (incl. completed)" : doneCount ? " (open only)" : ""}</span>
+              Total <span className="mono" style={{ fontSize: "0.7rem", color: "var(--text-muted)", fontWeight: 400 }}>// {counted.length} entr{counted.length === 1 ? "y" : "ies"}{hasFilters ? " (filtered)" : ""}{countedDone ? ` · incl. ${countedDone} completed` : ""}</span>
             </div>
             <div className="cell fixed num" style={{ width: COL.units }}>{totalUnits}</div>
             <div style={{ width: COL.rate, flex: "none" }} />
