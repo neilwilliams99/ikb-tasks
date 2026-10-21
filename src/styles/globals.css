@@ -347,3 +347,5 @@ footer.page-foot a { color: var(--teal); text-decoration: none; }
 .chart-tip .tip-row span { flex: 1; color: var(--text-secondary); }
 .chart-tip .tip-row b { font-family: 'JetBrains Mono'; font-weight: 500; }
 .chart-tip .tip-row.total { border-top: 1px solid var(--border-subtle); margin-top: 4px; padding-top: 4px; }
+.badge.warn { background: rgba(251,191,36,0.12); color: var(--warn); border-color: rgba(251,191,36,0.4); }
+.warn-line { font-size: 0.75rem; color: var(--warn); margin: 0 0 12px; }
