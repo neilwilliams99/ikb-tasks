@@ -13,6 +13,13 @@ export const today = () => {
 
 export const money = (x) => "$" + (Number(x) || 0).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+// Accounting style: whole dollars, negatives in brackets, never a minus sign
+export const acct = (x, cents = false) => {
+  const n = Number(x) || 0;
+  const s = "$" + Math.abs(n).toLocaleString("en-AU", { minimumFractionDigits: cents ? 2 : 0, maximumFractionDigits: cents ? 2 : 0 });
+  return n < 0 && Math.abs(n) >= (cents ? 0.005 : 0.5) ? `(${s})` : s;
+};
+
 export const num = (x) => {
   const n = parseFloat(x);
   return isFinite(n) ? n : 0;

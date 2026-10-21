@@ -7,12 +7,14 @@ import TimeSheet from "./pages/TimeSheet.jsx";
 import Reports from "./pages/Reports.jsx";
 import ProjectLibrary from "./pages/ProjectLibrary.jsx";
 import Apps from "./pages/Apps.jsx";
+import Loans from "./pages/Loans.jsx";
 
 const PAGES = [
   ["dashboard", "Task Board"],
   ["timesheet", "Time Sheet"],
   ["reports", "Reports"],
   ["projects", "Project Library"],
+  ["loans", "Loans"],
   ["apps", "Apps"],
 ];
 
@@ -86,6 +88,7 @@ export default function App() {
         {page === "timesheet" && <TimeSheet projects={projects} pickable={activeProjects} />}
         {page === "reports" && <Reports projects={projects} pickable={activeProjects} />}
         {page === "projects" && <ProjectLibrary projects={projects} setProjects={setProjects} />}
+        {page === "loans" && <Loans />}
         {page === "apps" && <Apps />}
       </main>
 
