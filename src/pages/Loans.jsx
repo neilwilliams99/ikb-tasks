@@ -24,6 +24,8 @@ const blankToNull = (v) => (v === "" || v === null || v === undefined ? null : n
 // Payoff text for a schedule: the month it clears, or what is still owed when the term ends
 const payoffText = (s) => (s.paidOff ? `${monthLabel(s.payoffMonth)} · ${years(s.months)}` : `${monthLabel(monthKey(START, s.months))} · ${acct(s.endBalance)} due`);
 
+const belowMinText = (s) => `⚠ From ${monthLabel(s.belowMinFrom)} your fixed repayment is below the minimum, so the minimum is used. Add a repayment change to set a new amount.`;
+
 export default function Loans() {
   const [loans, setLoans] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -60,7 +62,7 @@ export default function Loans() {
       repayment: blankToNull(draft.repayment), repayment_freq: draft.repayment_freq,
       extra: num(draft.extra), extra_freq: draft.extra_freq, offset_balance: num(draft.offset_balance),
       tax_deductible: !!draft.tax_deductible, notes: draft.notes || null,
-      events: (draft.events || []).filter((e) => e.month && e.type).map((e) => ({ month: e.month, type: e.type, value: num(e.value) })),
+      events: (draft.events || []).filter((e) => e.month && e.type).map((e) => ({ month: e.month, type: e.type, value: e.type === "repayment" ? blankToNull(e.value) : num(e.value) })),
     };
     if (draft.id) {
       const [u] = await supabase.from("loans").update(body, draft.id).catch(() => []);
@@ -167,6 +169,7 @@ export default function Loans() {
               <div className="cell strong" style={{ flex: 1.4, display: "flex", alignItems: "center", gap: 8 }}>
                 <i className="dot" style={{ background: colorOf(l) }} />{l.name}
                 {l.tax_deductible && <span className="badge" title="Tax deductible">tax</span>}
+                {s.belowMinFrom && <span className="badge warn" title={belowMinText(s)}>min</span>}
               </div>
               <div className="cell fixed mono" style={{ width: 54 }}>{l.repayment_type === "io" ? "I/O" : "P&I"}</div>
               <div className="cell fixed num" style={{ width: 64 }}>{pct(l.rate)}</div>
@@ -337,6 +340,7 @@ function LoanDetail({ loan, color, taxRate, onSave, onEdit }) {
         </span>
       </div>
       {loan.notes && <p className="hint-line" style={{ margin: "0 0 12px" }}>// {loan.notes}</p>}
+      {(changed ? wi : plan).belowMinFrom && <p className="warn-line">{belowMinText(changed ? wi : plan)}</p>}
 
       <div className="whatif">
         <span className="eyebrow" style={{ margin: 0 }}>// what if</span>
@@ -400,7 +404,10 @@ function Schedule({ rows, loan, taxRate }) {
       {rows.map((r) => (
         <div key={r.label} className="row data">
           <div className="cell" style={{ flex: 1.4 }}>{r.label}{r.sub && <span className="mono" style={{ marginLeft: 8, fontSize: "0.68rem", color: "var(--text-muted)" }}>{r.sub}</span>}</div>
-          {cols.map(([l, k]) => <div key={l} className={`cell num${k === "closing" ? " accent" : ""}`} style={{ flex: 1 }}>{acct(r[k])}</div>)}
+          {cols.map(([l, k]) => (
+            <div key={l} className={`cell num${k === "closing" ? " accent" : k === "repayment" && r.belowMin ? " warn" : ""}`} style={{ flex: 1 }}
+              title={k === "repayment" && r.belowMin ? "Minimum repayment paid: your fixed amount is below it" : undefined}>{acct(r[k])}</div>
+          ))}
           {loan.tax_deductible && <div className="cell num ok" style={{ flex: 1 }}>{acct(-taxSaving(loan, r.interest, taxRate))}</div>}
         </div>
       ))}
@@ -476,7 +483,7 @@ function LoanForm({ draft, onClose, onSave }) {
             <div key={i} style={{ display: "flex", gap: 6, marginBottom: 6 }}>
               <input type="month" value={e.month} onChange={(ev) => setEvent(i, "month", ev.target.value)} className="input" style={{ width: 160 }} />
               <select value={e.type} onChange={(ev) => setEvent(i, "type", ev.target.value)} className="input">{EVENT_TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
-              <input type="number" value={e.value} onChange={(ev) => setEvent(i, "value", ev.target.value)} placeholder={EVENT_TYPES.find(([k]) => k === e.type)?.[2]} className="input num" style={{ width: 140 }} />
+              <input type="number" value={e.value ?? ""} onChange={(ev) => setEvent(i, "value", ev.target.value)} placeholder={EVENT_TYPES.find(([k]) => k === e.type)?.[2]} className="input num" style={{ width: 140 }} />
               <button className="btn btn-danger btn-icon" style={{ flex: "none", alignSelf: "center" }} aria-label="Remove change" onClick={() => setD({ ...d, events: d.events.filter((_, j) => j !== i) })}>{"✕"}</button>
             </div>
           ))}
@@ -489,6 +496,7 @@ function LoanForm({ draft, onClose, onSave }) {
             // {acct(perMonth(d.extra, d.extra_freq) + (s.rows[0]?.repayment ?? 0))}/month · total interest {acct(s.totalInterest)} · {s.paidOff ? `paid off ${monthLabel(s.payoffMonth)}` : `${acct(s.endBalance)} owed at term end`}
           </p>
         )}
+        {valid && s.belowMinFrom && <p className="warn-line" style={{ margin: 0 }}>{belowMinText(s)}</p>}
       </div>
       <div className="modal-actions">
         <button onClick={onClose} className="btn btn-ghost">Cancel</button>

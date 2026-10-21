@@ -24,7 +24,10 @@ export const EVENT_TYPES = [
   ["rate", "Rate change", "new rate %"],
   ["offset", "Offset balance", "new offset $"],
   ["lump", "Lump sum payment", "amount $"],
+  ["repayment", "Repayment change", "new $ · blank = min"],
 ];
+// A repayment change's value is null for "back to the minimum"
+const fixedOf = (amount, freq) => (amount === null || amount === "" || amount === undefined ? null : perMonth(amount, freq));
 
 const MAX_MONTHS = 50 * 12;
 
@@ -57,8 +60,9 @@ export function schedule(loan, start = new Date(), { baseline = false } = {}) {
   const ioMonths = loan.repayment_type === "io"
     ? (loan.io_years == null || loan.io_years === "" ? termMonths : Math.round(Number(loan.io_years) * 12))
     : 0;
-  const fixed = loan.repayment === null || loan.repayment === "" || loan.repayment === undefined
-    ? null : perMonth(loan.repayment, loan.repayment_freq);
+  // A fixed repayment, or null for the minimum. Repayment change events are at
+  // the loan's own repayment frequency.
+  let fixed = fixedOf(loan.repayment, loan.repayment_freq);
   const events = (loan.events || [])
     .map((e) => ({ ...e, at: monthsUntil(start, e.month) }))
     .filter((e) => !(baseline && (e.type === "offset" || e.type === "lump")));
@@ -76,6 +80,7 @@ export function schedule(loan, start = new Date(), { baseline = false } = {}) {
       if (e.at !== i && !(i === 0 && e.at < 0)) continue; // past events apply from today
       if (e.type === "rate") { rate = Number(e.value) || 0; rateChanged = true; }
       if (e.type === "offset") offset = Number(e.value) || 0;
+      if (e.type === "repayment") { fixed = fixedOf(e.value, loan.repayment_freq); rateChanged = true; } // re-work the minimum too
     }
     const io = i < ioMonths;
     if (!io && (calcPmt === null || rateChanged)) calcPmt = pmt(rate, termMonths - i, balance);
@@ -84,16 +89,21 @@ export function schedule(loan, start = new Date(), { baseline = false } = {}) {
     const lump = events.filter((e) => e.type === "lump" && e.at === i).reduce((s, e) => s + (Number(e.value) || 0), 0);
     const extraPlanned = extraPm + lump;
     const interest = Math.max(0, opening - offset - extraPlanned) * (rate / 100 / 12);
-    let repayment = io ? (fixed ?? interest) : (fixed ?? calcPmt);
+    // A fixed repayment is never less than the bank's minimum: if a rate rise
+    // lifts the minimum above it, the minimum is paid and the row is flagged.
+    const minimum = io ? interest : calcPmt;
+    const belowMin = fixed !== null && fixed < minimum - 0.005;
+    let repayment = belowMin ? minimum : (fixed ?? minimum);
     repayment = Math.min(repayment, opening + interest);
-    const principal = repayment - interest; // negative if a fixed payment doesn't cover the interest
+    const principal = repayment - interest;
     const extra = Math.min(extraPlanned, Math.max(0, opening - principal));
     balance = opening - principal - extra;
     if (balance < 0.005) balance = 0;
 
-    rows.push({ i, month: monthKey(start, i), opening, rate, offset, repayment, interest, principal, extra, closing: balance, io });
+    rows.push({ i, month: monthKey(start, i), opening, rate, offset, repayment, interest, principal, extra, closing: balance, io, belowMin });
   }
   const paidOff = balance === 0;
+  const firstBelow = rows.find((r) => r.belowMin);
   return {
     rows,
     paidOff,
@@ -101,6 +111,7 @@ export function schedule(loan, start = new Date(), { baseline = false } = {}) {
     endBalance: balance,                 // owed at end of term if not paid off
     payoffMonth: paidOff ? rows[rows.length - 1].month : null,
     totalInterest: rows.reduce((s, r) => s + r.interest, 0),
+    belowMinFrom: firstBelow ? firstBelow.month : null, // first month the minimum overrode a fixed repayment
   };
 }
 
@@ -115,6 +126,7 @@ export function yearly(rows) {
     if (!out[y]) out[y] = { year: y + 1, from: r.month, to: r.month, opening: r.opening, repayment: 0, interest: 0, principal: 0, extra: 0, closing: 0 };
     const o = out[y];
     o.to = r.month; o.repayment += r.repayment; o.interest += r.interest; o.principal += r.principal; o.extra += r.extra; o.closing = r.closing;
+    o.belowMin = o.belowMin || r.belowMin;
   });
   return out;
 }
