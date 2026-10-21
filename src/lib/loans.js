@@ -100,7 +100,8 @@ export function schedule(loan, start = new Date(), { baseline = false } = {}) {
     balance = opening - principal - extra;
     if (balance < 0.005) balance = 0;
 
-    rows.push({ i, month: monthKey(start, i), opening, rate, offset, repayment, interest, principal, extra, closing: balance, io, belowMin });
+    // extra includes any lump sum paid this month; lump is that one-off part on its own
+    rows.push({ i, month: monthKey(start, i), opening, rate, offset, repayment, interest, principal, extra, lump: Math.min(lump, extra), closing: balance, io, belowMin });
   }
   const paidOff = balance === 0;
   const firstBelow = rows.find((r) => r.belowMin);
