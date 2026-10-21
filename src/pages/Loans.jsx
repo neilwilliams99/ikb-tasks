@@ -443,7 +443,7 @@ function LoanForm({ draft, onClose, onSave }) {
             </select>
           </div>
           {io ? (
-            <div className="field"><label>Interest only for <span className="hint">years · blank = whole term</span></label><input type="number" step="0.5" min="0" value={d.io_years} onChange={set("io_years")} className="input num" /></div>
+            <div className="field"><label>Interest only for <span className="hint">years</span></label><input type="number" step="0.5" min="0" value={d.io_years} onChange={set("io_years")} placeholder="whole term" className="input num" /></div>
           ) : <div />}
           <div className="field"><label>Offset balance <span className="hint">$</span></label><input type="number" min="0" value={d.offset_balance} onChange={set("offset_balance")} className="input num" /></div>
         </div>
