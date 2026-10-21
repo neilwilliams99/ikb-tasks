@@ -35,7 +35,7 @@ export default function Loans() {
   useEffect(() => {
     Promise.all([
       supabase.from("loans").select("order=sort_order.asc,id.asc").then(setLoans),
-      supabase.from("loan_settings").select("id=eq.1").then(([s]) => setTaxRate(s ? String(s.tax_rate) : "0")),
+      supabase.from("loan_settings").select("id=eq.1").then(([s]) => setTaxRate(s ? String(s.tax_rate) : "39")),
     ]).catch(() => {}).finally(() => setLoading(false));
   }, []);
 

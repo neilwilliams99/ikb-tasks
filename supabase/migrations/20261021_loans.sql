@@ -39,7 +39,7 @@ create table if not exists public.loans (
 
 create table if not exists public.loan_settings (
   id        integer primary key default 1 check (id = 1),
-  tax_rate  numeric not null default 0
+  tax_rate  numeric not null default 39
 );
 insert into public.loan_settings (id) values (1) on conflict (id) do nothing;
 
