@@ -277,6 +277,8 @@ function Cashflow({ loans, calc, colorOf, taxRate, horizon }) {
     return t;
   }, { out: 0, regular: 0, tax: 0 }));
   const netAt = (i) => (i >= 0 && i < horizon ? months[i].regular - months[i].tax : 0);
+  // One loan's regular net cash out in month i (0 once it is paid off or its term ends)
+  const loanNet = (l, i) => { const r = row(l, i); return r ? regular(r) - taxSaving(l, r.interest, taxRate) : 0; };
   const next12 = months.slice(0, 12).reduce((s, m) => s + m.out - m.tax, 0);
   const peak = months.reduce((p, m, i) => (m.regular > p.v + 0.5 ? { v: m.regular, i } : p), { v: 0, i: 0 });
 
@@ -291,8 +293,10 @@ function Cashflow({ loans, calc, colorOf, taxRate, horizon }) {
     const ioMonths = l.repayment_type === "io" && l.io_years !== null && l.io_years !== "" ? Math.round(num(l.io_years) * 12) : 0;
     if (ioMonths > 0 && ioMonths < s.months) changes.push({ i: ioMonths, loan: l, what: "Interest only ends; principal & interest repayments start" });
     if (s.belowMinFrom) changes.push({ i: monthsUntil(START, s.belowMinFrom), loan: l, what: "Minimum repayment overrides your fixed amount", warn: true });
+    // The last payment is usually only what's left, so "before" is the last full month
+    const last = s.rows[s.months - 1];
     changes.push(s.paidOff
-      ? { i: s.months, loan: l, what: "Paid off; repayments stop" }
+      ? { i: s.months, loan: l, beforeAt: Math.max(0, s.months - 2), what: `Paid off; repayments stop${last ? ` (final payment ${acct(last.repayment + last.extra)} in ${monthLabel(last.month)})` : ""}` }
       : { i: s.months, loan: l, what: `Term ends; ${acct(s.endBalance)} balance due (refinance or repay)`, warn: true });
   });
   changes.sort((a, b) => a.i - b.i);
@@ -310,19 +314,20 @@ function Cashflow({ loans, calc, colorOf, taxRate, horizon }) {
       </div>
       <div className="hint-line" style={{ margin: "0 0 8px" }}>// regular cash out per month by loan (repayments + extra; lump sums listed as one-offs)</div>
       <TimeChart labels={labels} series={series} stack height={220} tickEvery={horizon > 180 ? 60 : 24} tickLabel={(i) => `Y${i / 12}`} />
-      <div className="section-title" style={{ marginTop: 16 }}>When it changes <span className="mono" style={{ textTransform: "none", color: "var(--text-muted)" }}>net per month after tax saving, all loans</span></div>
+      <div className="section-title" style={{ marginTop: 16 }}>When it changes <span className="mono" style={{ textTransform: "none", color: "var(--text-muted)" }}>net per month after tax saving</span></div>
       <div>
         <div className="table" style={{ marginBottom: 0 }}>
           <div className="row head">
             <div className="col-head" style={{ width: 96, flex: "none" }}>Month</div>
             <div className="col-head" style={{ flex: 4 }}>What changes</div>
-            <div className="col-head" style={{ flex: 1, textAlign: "right" }} title="Net cash out per month after tax saving, all loans, the month before">Before</div>
-            <div className="col-head" style={{ flex: 1, textAlign: "right" }} title="Net cash out per month after tax saving, all loans, from this month">After</div>
+            <div className="col-head" style={{ flex: 1, textAlign: "right" }} title="This loan's net cash out per month before the change">Before</div>
+            <div className="col-head" style={{ flex: 1, textAlign: "right" }} title="This loan's net cash out per month from this month">After</div>
             <div className="col-head" style={{ flex: 0.9, textAlign: "right" }}>Change</div>
+            <div className="col-head" style={{ flex: 1.1, textAlign: "right" }} title="Net cash out per month across all loans from this month">All loans after</div>
           </div>
           {changes.map((c, k) => {
-            const first = k === 0 || changes[k - 1].i !== c.i; // before/after are for the month, shown once
-            const before = c.i > 0 ? netAt(c.i - 1) : null, after = netAt(c.i);
+            const first = k === 0 || changes[k - 1].i !== c.i; // the all-loans total is for the month, shown once
+            const before = c.i > 0 ? loanNet(c.loan, c.beforeAt ?? c.i - 1) : null, after = loanNet(c.loan, c.i);
             return (
               <div key={k} className="row data">
                 <div className="cell fixed mono" style={{ width: 96 }}>{first ? labels[c.i] || monthLabel(monthKey(START, c.i)) : ""}</div>
@@ -330,11 +335,12 @@ function Cashflow({ loans, calc, colorOf, taxRate, horizon }) {
                   <i className="dot" style={{ background: colorOf(c.loan) }} />
                   <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}><b style={{ fontWeight: 500 }}>{c.loan.name}</b> · {c.what}</span>
                 </div>
-                <div className="cell num muted" style={{ flex: 1 }}>{first && before != null ? acct(before) : ""}</div>
-                <div className="cell num" style={{ flex: 1 }}>{first ? acct(after) : ""}</div>
-                <div className={`cell num${first && before != null && after < before ? " ok" : ""}`} style={{ flex: 0.9 }}>
-                  {first && before != null && Math.abs(after - before) >= 0.5 ? acct(after - before) : first && before != null ? "—" : ""}
+                <div className="cell num muted" style={{ flex: 1 }}>{before != null ? acct(before) : "—"}</div>
+                <div className="cell num" style={{ flex: 1 }}>{acct(after)}</div>
+                <div className={`cell num${before != null && after < before - 0.5 ? " ok" : ""}`} style={{ flex: 0.9 }}>
+                  {before != null && Math.abs(after - before) >= 0.5 ? acct(after - before) : "—"}
                 </div>
+                <div className="cell num accent" style={{ flex: 1.1 }}>{first ? acct(netAt(c.i)) : ""}</div>
               </div>
             );
           })}
