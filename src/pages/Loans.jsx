@@ -277,10 +277,11 @@ function Cashflow({ loans, calc, colorOf, taxRate, horizon }) {
     t.out += r.repayment + r.extra; t.regular += regular(r); t.tax += taxSaving(l, r.interest, taxRate);
     return t;
   }, { out: 0, regular: 0, tax: 0 }));
-  const netAt = (i) => (i >= 0 && i < horizon ? months[i].regular - months[i].tax : 0);
-  // One loan's regular net cash out in month i (0 once it is paid off or its term ends)
-  const loanNet = (l, i) => { const r = row(l, i); return r ? regular(r) - taxSaving(l, r.interest, taxRate) : 0; };
-  const next12 = months.slice(0, 12).reduce((s, m) => s + m.out - m.tax, 0);
+  // Cash out only. The tax saving is indicative and never nets off a cashflow figure.
+  const netAt = (i) => (i >= 0 && i < horizon ? months[i].regular : 0);
+  // One loan's regular cash out in month i (0 once it is paid off or its term ends)
+  const loanNet = (l, i) => { const r = row(l, i); return r ? regular(r) : 0; };
+  const next12 = months.slice(0, 12).reduce((s, m) => s + m.out, 0);
   const peak = months.reduce((p, m, i) => (m.regular > p.v + 0.5 ? { v: m.regular, i } : p), { v: 0, i: 0 });
 
   // Months where the regular cash out steps up or down, and why
@@ -309,22 +310,22 @@ function Cashflow({ loans, calc, colorOf, taxRate, horizon }) {
     <div className="card" style={{ marginBottom: 16 }}>
       <div className="section-title">Cashflow <span className="mono" style={{ textTransform: "none", color: "var(--text-muted)" }}>all loans · cash out of your account</span></div>
       <div className="kpis">
-        <Kpi label="Cash out this month" value={acct(months[0]?.out)} sub={`${acct(netAt(0))} after ${acct(-(months[0]?.tax || 0))} tax saving`} />
-        <Kpi label="Net cash out next 12 months" value={acct(next12)} sub={`about ${acct(next12 / 12)} a month after tax`} />
+        <Kpi label="Cash out this month" value={acct(months[0]?.out)} sub={`${acct(-(months[0]?.tax || 0))} tax saving, indicative only`} />
+        <Kpi label="Cash out next 12 months" value={acct(next12)} sub={`about ${acct(next12 / 12)} a month`} />
         <Kpi label="Highest regular month" value={acct(peak.v)} sub={`${labels[peak.i] || "—"}${peak.i ? "" : " (now)"}`} />
       </div>
       <div className="hint-line" style={{ margin: "0 0 8px" }}>// regular cash out per month by loan (repayments + extra; lump sums listed as one-offs)</div>
       <TimeChart labels={labels} series={series} stack height={220} tickEvery={horizon > 180 ? 60 : 24} tickLabel={(i) => `Y${i / 12}`} />
-      <div className="section-title" style={{ marginTop: 16 }}>When it changes <span className="mono" style={{ textTransform: "none", color: "var(--text-muted)" }}>net per month after tax saving</span></div>
+      <div className="section-title" style={{ marginTop: 16 }}>When it changes <span className="mono" style={{ textTransform: "none", color: "var(--text-muted)" }}>cash out per month</span></div>
       <div>
         <div className="table wide" style={{ marginBottom: 0, "--row-min": "780px" }}>
           <div className="row head">
             <div className="col-head" style={{ width: 96, flex: "none" }}>Month</div>
             <div className="col-head" style={{ flex: 4 }}>What changes</div>
-            <div className="col-head" style={{ flex: 1, textAlign: "right" }} title="This loan's net cash out per month before the change">Before</div>
-            <div className="col-head" style={{ flex: 1, textAlign: "right" }} title="This loan's net cash out per month from this month">After</div>
+            <div className="col-head" style={{ flex: 1, textAlign: "right" }} title="This loan's cash out per month before the change">Before</div>
+            <div className="col-head" style={{ flex: 1, textAlign: "right" }} title="This loan's cash out per month from this month">After</div>
             <div className="col-head" style={{ flex: 0.9, textAlign: "right" }}>Change</div>
-            <div className="col-head" style={{ flex: 1.1, textAlign: "right" }} title="Net cash out per month across all loans from this month">All loans after</div>
+            <div className="col-head" style={{ flex: 1.1, textAlign: "right" }} title="Cash out per month across all loans from this month">All loans after</div>
           </div>
           <div className="row data">
             <div className="cell fixed mono" style={{ width: 96 }}>{labels[0] || monthLabel(monthKey(START, 0))}</div>
