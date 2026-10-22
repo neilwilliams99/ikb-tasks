@@ -8,6 +8,7 @@ import Reports from "./pages/Reports.jsx";
 import ProjectLibrary from "./pages/ProjectLibrary.jsx";
 import Apps from "./pages/Apps.jsx";
 import Loans from "./pages/Loans.jsx";
+import ErrorBoundary from "./components/ErrorBoundary.jsx";
 
 const PAGES = [
   ["dashboard", "Task Board"],
@@ -53,12 +54,23 @@ export default function App() {
     return () => clearTimeout(t);
   }, [error]);
 
-  const go = (p) => {
-    setPage(p);
+  // Each tab is a history entry, so Back steps through the tabs rather than
+  // leaving the site; popstate puts the page back in step with the URL.
+  const pageUrl = (p) => {
     const url = new URL(window.location.href);
     if (p === "dashboard") url.searchParams.delete("page"); else url.searchParams.set("page", p);
-    window.history.replaceState(null, "", url);
+    return url;
   };
+  const go = (p) => {
+    if (p === page) return;
+    setPage(p);
+    window.history.pushState({ page: p }, "", pageUrl(p));
+  };
+  useEffect(() => {
+    const onPop = () => setPage(initialPage());
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   if (session === undefined) return null;
   if (!session) return <SignIn />;
@@ -84,12 +96,14 @@ export default function App() {
       </header>
 
       <main className="content">
-        {page === "dashboard" && <TaskBoard projects={projects} pickable={activeProjects} />}
-        {page === "timesheet" && <TimeSheet projects={projects} pickable={activeProjects} />}
-        {page === "reports" && <Reports projects={projects} pickable={activeProjects} />}
-        {page === "projects" && <ProjectLibrary projects={projects} setProjects={setProjects} />}
-        {page === "loans" && <Loans />}
-        {page === "apps" && <Apps />}
+        <ErrorBoundary key={page} label={PAGES.find(([k]) => k === page)?.[1]}>
+          {page === "dashboard" && <TaskBoard projects={projects} pickable={activeProjects} />}
+          {page === "timesheet" && <TimeSheet projects={projects} pickable={activeProjects} />}
+          {page === "reports" && <Reports projects={projects} pickable={activeProjects} />}
+          {page === "projects" && <ProjectLibrary projects={projects} setProjects={setProjects} />}
+          {page === "loans" && <Loans />}
+          {page === "apps" && <Apps />}
+        </ErrorBoundary>
       </main>
 
       <footer className="page-foot">
