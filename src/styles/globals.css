@@ -119,6 +119,10 @@ a { color: var(--teal); }
   overflow: hidden;
   margin-bottom: 16px;
 }
+/* Tables with too many columns to fit a narrow window: scroll sideways
+   rather than squeezing the figures until they are cut off. */
+.table.wide { overflow-x: auto; }
+.table.wide .row { min-width: var(--row-min, 980px); }
 .row {
   display: flex; align-items: center; gap: 10px;
   padding: 8px 16px;

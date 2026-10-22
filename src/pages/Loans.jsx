@@ -144,7 +144,7 @@ export default function Loans() {
       </div>
 
       {/* Summary table */}
-      <div className="table">
+      <div className="table wide" style={{ "--row-min": "1180px" }}>
         <div className="row head">
           <div className="col-head" style={{ flex: 1.4 }}>Loan</div>
           <div className="col-head" style={{ width: 40, flex: "none" }}>Type</div>
@@ -317,7 +317,7 @@ function Cashflow({ loans, calc, colorOf, taxRate, horizon }) {
       <TimeChart labels={labels} series={series} stack height={220} tickEvery={horizon > 180 ? 60 : 24} tickLabel={(i) => `Y${i / 12}`} />
       <div className="section-title" style={{ marginTop: 16 }}>When it changes <span className="mono" style={{ textTransform: "none", color: "var(--text-muted)" }}>net per month after tax saving</span></div>
       <div>
-        <div className="table" style={{ marginBottom: 0 }}>
+        <div className="table wide" style={{ marginBottom: 0, "--row-min": "780px" }}>
           <div className="row head">
             <div className="col-head" style={{ width: 96, flex: "none" }}>Month</div>
             <div className="col-head" style={{ flex: 4 }}>What changes</div>
@@ -357,7 +357,7 @@ function PortfolioYears({ years: ys, taxRate }) {
   const shown = open ? ys : ys.slice(0, 10);
   const cols = ["Repayments", "Extra", "Cash out", "Tax saving", "Net cash out", "Net / month", "Interest", "Closing balance"];
   return (
-    <div className="table">
+    <div className="table wide" style={{ "--row-min": "1120px" }}>
       <div className="row head">
         <div className="col-head" style={{ width: 90, flex: "none" }}>All loans</div>
         <div className="col-head" style={{ flex: 1.4 }}>Period</div>
@@ -498,7 +498,7 @@ function Schedule({ rows, loan, taxRate }) {
   const cols = [["Opening", "opening"], ["Repayment", "repayment"], ["Interest", "interest"], ["Principal", "principal"], ["Extra", "extra"], ["Closing", "closing"]];
   const total = (k) => rows.reduce((s, r) => s + r[k], 0);
   return (
-    <div className="table" style={{ maxHeight: 420, overflowY: "auto", marginBottom: 0 }}>
+    <div className="table wide" style={{ maxHeight: 420, overflowY: "auto", marginBottom: 0, "--row-min": "860px" }}>
       <div className="row head" style={{ position: "sticky", top: 0, zIndex: 1 }}>
         <div className="col-head" style={{ flex: 1.4 }}>Period</div>
         {cols.map(([l]) => <div key={l} className="col-head" style={{ flex: 1, textAlign: "right" }}>{l}</div>)}
