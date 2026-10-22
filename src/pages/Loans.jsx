@@ -136,8 +136,8 @@ export default function Loans() {
       <div className="kpis">
         <Kpi label="Owed today" value={acct(tot.balance)} sub={`${acct(tot.balance - tot.offset)} net of ${acct(tot.offset)} offset`} />
         <Kpi label="Paid this month" value={acct(tot.repayment + tot.extra)} sub={`${acct(tot.repayment)} repayments + ${acct(tot.extra)} extra`} />
-        <Kpi label="Interest next 12 months" value={acct(tot.int12)} sub={tot.tax12 ? `${acct(tot.int12 - tot.tax12)} after tax saving` : "no deductible loans ticked"} />
-        <Kpi label="Tax saving next 12 months" value={acct(-tot.tax12)} sub={`interest × ${pct(taxRate)} on deductible loans`} accent="ok" />
+        <Kpi label="Interest next 12 months" value={acct(tot.int12)} sub={`about ${acct(tot.int12 / 12)} a month`} />
+        <Kpi label="Tax saving next 12 months" value={acct(-tot.tax12)} sub={`indicative · interest × ${pct(taxRate)} on deductible loans`} accent="ok" />
         <Kpi label="Interest saved" value={acct(tot.saved)} sub="by extra repayments, offsets & lump sums" accent="ok" />
         <Kpi label={tot.owedAtEnd ? "Last loan ends" : "Debt free"} value={horizon ? monthLabel(monthKey(START, horizon - 1)) : "—"}
           sub={tot.owedAtEnd ? `${acct(tot.owedAtEnd)} still owed on interest-only loans at term end` : `in ${years(horizon)}`} accent={tot.owedAtEnd ? "warn" : undefined} />
@@ -367,26 +367,25 @@ function Cashflow({ loans, calc, colorOf, taxRate, horizon }) {
 function PortfolioYears({ years: ys, taxRate }) {
   const [open, setOpen] = useState(false);
   const shown = open ? ys : ys.slice(0, 10);
-  const cols = ["Repayments", "Extra", "Cash out", "Tax saving", "Net cash out", "Net / month", "Interest", "Closing balance"];
+  const cols = ["Repayments", "Extra", "Cash out", "Cash out / month", "Tax saving", "Interest", "Closing balance"];
   return (
-    <div className="table wide" style={{ "--row-min": "1120px" }}>
+    <div className="table wide" style={{ "--row-min": "1020px" }}>
       <div className="row head">
         <div className="col-head" style={{ width: 90, flex: "none" }}>All loans</div>
         <div className="col-head" style={{ flex: 1.4 }}>Period</div>
         {cols.map((l) => <div key={l} className="col-head" style={{ flex: 1, textAlign: "right" }}>{l}</div>)}
       </div>
       {shown.map((y, i) => {
-        const out = y.repayment + y.extra, net = out - y.tax;
+        const out = y.repayment + y.extra;
         return (
           <div key={i} className="row data">
             <div className="cell fixed mono" style={{ width: 90 }}>Year {i + 1}</div>
             <div className="cell muted" style={{ flex: 1.4 }}>{monthLabel(monthKey(START, i * 12))} – {monthLabel(monthKey(START, i * 12 + 11))}</div>
             <div className="cell num" style={{ flex: 1 }}>{acct(y.repayment)}</div>
             <div className="cell num" style={{ flex: 1 }}>{acct(y.extra)}</div>
-            <div className="cell num" style={{ flex: 1 }}>{acct(out)}</div>
+            <div className="cell num strong" style={{ flex: 1 }}>{acct(out)}</div>
+            <div className="cell num" style={{ flex: 1 }}>{acct(out / 12)}</div>
             <div className="cell num ok" style={{ flex: 1 }}>{y.tax ? acct(-y.tax) : "—"}</div>
-            <div className="cell num strong" style={{ flex: 1 }}>{acct(net)}</div>
-            <div className="cell num" style={{ flex: 1 }}>{acct(net / 12)}</div>
             <div className="cell num muted" style={{ flex: 1 }}>{acct(y.interest)}</div>
             <div className="cell num accent" style={{ flex: 1 }}>{acct(y.closing)}</div>
           </div>
@@ -394,7 +393,7 @@ function PortfolioYears({ years: ys, taxRate }) {
       })}
       {ys.length > 10 && (
         <div className="row"><button className="btn-link" onClick={() => setOpen(!open)}>{open ? "show first 10 years" : `show all ${ys.length} years`}</button>
-          <span className="mono" style={{ marginLeft: "auto", fontSize: "0.68rem", color: "var(--text-muted)" }}>// tax saving = interest × {pct(taxRate)} on deductible loans</span></div>
+          <span className="mono" style={{ marginLeft: "auto", fontSize: "0.68rem", color: "var(--text-muted)" }}>// tax saving = interest × {pct(taxRate)} on deductible loans, indicative only</span></div>
       )}
     </div>
   );
