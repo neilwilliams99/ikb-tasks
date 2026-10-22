@@ -147,7 +147,7 @@ export default function Loans() {
       <div className="table">
         <div className="row head">
           <div className="col-head" style={{ flex: 1.4 }}>Loan</div>
-          <div className="col-head" style={{ width: 54, flex: "none" }}>Type</div>
+          <div className="col-head" style={{ width: 40, flex: "none" }}>Type</div>
           <div className="col-head" style={{ width: 64, flex: "none", textAlign: "right" }}>Rate</div>
           <div className="col-head" style={{ flex: 1, textAlign: "right" }}>Balance</div>
           <div className="col-head" style={{ flex: 1, textAlign: "right" }}>Offset</div>
@@ -167,11 +167,12 @@ export default function Loans() {
           return (
             <div key={l.id} className={`row data clickable-row${selected?.id === l.id ? " selected" : ""}`} onClick={() => setSelectedId(l.id)}>
               <div className="cell strong" style={{ flex: 1.4, display: "flex", alignItems: "center", gap: 8 }}>
-                <i className="dot" style={{ background: colorOf(l) }} />{l.name}
+                <i className="dot" style={{ background: colorOf(l) }} />
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{l.name}</span>
                 {l.tax_deductible && <span className="badge" title="Tax deductible">tax</span>}
                 {s.belowMinFrom && <span className="badge warn" title={belowMinText(s)}>min</span>}
               </div>
-              <div className="cell fixed mono" style={{ width: 54 }}>{l.repayment_type === "io" ? "I/O" : "P&I"}</div>
+              <div className="cell fixed mono" style={{ width: 40 }}>{l.repayment_type === "io" ? "I/O" : "P&I"}</div>
               <div className="cell fixed num" style={{ width: 64 }}>{pct(l.rate)}</div>
               <div className="cell num" style={{ flex: 1 }}>{acct(l.balance)}</div>
               <div className="cell num muted" style={{ flex: 1 }}>{acct(l.offset_balance)}</div>
@@ -202,7 +203,7 @@ export default function Loans() {
         {active.length > 0 && (
           <div className="row total">
             <div className="cell" style={{ flex: 1.4 }}>Total <span className="mono" style={{ fontSize: "0.7rem", color: "var(--text-muted)", fontWeight: 400 }}>// {active.length} loan{active.length === 1 ? "" : "s"}</span></div>
-            <div style={{ width: 54 + 64 + 10, flex: "none" }} />
+            <div style={{ width: 40 + 64 + 10, flex: "none" }} />
             <div className="cell num" style={{ flex: 1 }}>{acct(tot.balance)}</div>
             <div className="cell num muted" style={{ flex: 1 }}>{acct(tot.offset)}</div>
             <div className="cell num" style={{ flex: 0.9 }}>{acct(tot.repayment)}</div>
