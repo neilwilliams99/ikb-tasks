@@ -326,6 +326,17 @@ function Cashflow({ loans, calc, colorOf, taxRate, horizon }) {
             <div className="col-head" style={{ flex: 0.9, textAlign: "right" }}>Change</div>
             <div className="col-head" style={{ flex: 1.1, textAlign: "right" }} title="Net cash out per month across all loans from this month">All loans after</div>
           </div>
+          <div className="row data">
+            <div className="cell fixed mono" style={{ width: 96 }}>{labels[0] || monthLabel(monthKey(START, 0))}</div>
+            <div className="cell muted" style={{ flex: 4, display: "flex", alignItems: "center", gap: 6 }} title="What you pay now, before any of the changes below">
+              <i className="dot" style={{ background: "transparent" }} />
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}><b style={{ fontWeight: 500 }}>Today</b> · starting point, {loans.length} loan{loans.length === 1 ? "" : "s"} as they stand</span>
+            </div>
+            <div className="cell num muted" style={{ flex: 1 }}>—</div>
+            <div className="cell num muted" style={{ flex: 1 }}>—</div>
+            <div className="cell num muted" style={{ flex: 0.9 }}>—</div>
+            <div className="cell num accent" style={{ flex: 1.1 }}>{acct(netAt(0))}</div>
+          </div>
           {changes.map((c, k) => {
             const first = k === 0 || changes[k - 1].i !== c.i; // the all-loans total is for the month, shown once
             const before = c.i > 0 ? loanNet(c.loan, c.beforeAt ?? c.i - 1) : null, after = loanNet(c.loan, c.i);
