@@ -103,7 +103,9 @@ export function schedule(loan, start = new Date(), { baseline = false } = {}) {
     // extra includes any lump sum paid this month; lump is that one-off part on its own
     rows.push({ i, month: monthKey(start, i), opening, rate, offset, repayment, interest, principal, extra, lump: Math.min(lump, extra), closing: balance, io, belowMin });
   }
-  const paidOff = balance === 0;
+  // No rows means nothing was ever scheduled (a blank or zero-balance loan),
+  // which is not the same as reaching zero: there is no payoff month to report.
+  const paidOff = rows.length > 0 && balance === 0;
   const firstBelow = rows.find((r) => r.belowMin);
   return {
     rows,
