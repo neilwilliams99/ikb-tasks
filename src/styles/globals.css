@@ -268,6 +268,27 @@ input[type="checkbox"] { accent-color: var(--teal); width: 15px; height: 15px; c
 .note-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border-subtle); font-size: 0.82rem; }
 .note-row.done span { color: var(--text-muted); text-decoration: line-through; }
 
+/* ===== EMAIL LINK ===== */
+.mail-link {
+  flex: none; color: var(--text-muted); text-decoration: none; font-size: 0.9rem;
+  line-height: 1; padding: 0 2px; transition: color var(--transition);
+}
+.mail-link:hover { color: var(--teal-light); }
+
+/* ===== EMAIL DROP ===== */
+.mail-drop {
+  position: fixed; inset: 0; z-index: 250; pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(11,15,20,0.6); backdrop-filter: blur(2px);
+}
+.mail-drop-card {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 28px 44px; border-radius: var(--radius-lg);
+  background: var(--dark-800); border: 2px dashed var(--teal);
+  box-shadow: var(--shadow-card), var(--shadow-glow);
+  color: var(--text-primary); font-size: 0.95rem;
+}
+
 /* ===== TOAST ===== */
 .toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 300;

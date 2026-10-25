@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabase.js";
 import { formatDate, formatStamp, today, has } from "../lib/format.js";
 import { SearchableDropdown, SortHeader, nextSort, sortBy, PageHead, Modal, FilterInput } from "../components/ui.jsx";
+import { isMailDrag, messagesFrom, emailUrl } from "../lib/maildrop.js";
 
 // Column widths — shared across header, filter, entry and data rows
 const COL = { project: 1.5, number: 80, client: 0.7, date: 96, task: 2, actions: 232 };
@@ -29,11 +30,51 @@ export default function TaskBoard({ projects, pickable }) {
   const dragFrom = useRef(null);                  // task id being dragged, not a row index
   const [dragOver, setDragOver] = useState(null); // task id being hovered
 
+  const [mailOver, setMailOver] = useState(false);        // an email is being dragged over the page
+  const [maildrop, setMaildrop] = useState(null);         // messages dropped, waiting on the dialog
+  const mailDepth = useRef(0);                            // enter/leave nest as the cursor crosses children
+
   useEffect(() => {
     Promise.all([
       supabase.from("tasks").select("order=sort_order.asc"),
       supabase.from("task_notes").select("order=created_at.asc"),
     ]).then(([t, n]) => { setTasks(t); setNotes(n); }).catch(ignore).finally(() => setLoading(false));
+  }, []);
+
+  // ── Drop an email anywhere on the board to start a task from its subject ──
+  // Listening on the window rather than a drop zone keeps the whole page a
+  // target. Every handler bails out unless the drag is an email, so dragging
+  // a row to reorder it and dragging a file in from the desktop both behave
+  // exactly as they did before.
+  useEffect(() => {
+    const enter = (e) => { if (!isMailDrag(e.dataTransfer)) return; mailDepth.current += 1; setMailOver(true); };
+    const over = (e) => {
+      if (!isMailDrag(e.dataTransfer)) return;
+      e.preventDefault();                      // without this the browser refuses the drop
+      e.dataTransfer.dropEffect = "copy";
+    };
+    const leave = (e) => {
+      if (!isMailDrag(e.dataTransfer)) return;
+      mailDepth.current = Math.max(0, mailDepth.current - 1);
+      if (mailDepth.current === 0) setMailOver(false);
+    };
+    const drop = (e) => {
+      if (!isMailDrag(e.dataTransfer)) return;
+      e.preventDefault();
+      mailDepth.current = 0; setMailOver(false);
+      const dropped = messagesFrom(e.dataTransfer);
+      if (dropped.messages.length) setMaildrop(dropped);
+    };
+    window.addEventListener("dragenter", enter);
+    window.addEventListener("dragover", over);
+    window.addEventListener("dragleave", leave);
+    window.addEventListener("drop", drop);
+    return () => {
+      window.removeEventListener("dragenter", enter);
+      window.removeEventListener("dragover", over);
+      window.removeEventListener("dragleave", leave);
+      window.removeEventListener("drop", drop);
+    };
   }, []);
 
   const projectOf = (t) => projects.find((p) => p.id === t.project_id);
@@ -53,6 +94,22 @@ export default function TaskBoard({ projects, pickable }) {
     if (!created) return;
     setTasks((prev) => [...prev, created]);
     setSelProject(null); setNewDate(""); setNewDesc("");
+  };
+
+  // One insert for the whole drop, so a drag of several emails either lands
+  // completely or not at all and cannot half-create tasks on a retry.
+  const addFromMail = async (rows, project, date, mailbox) => {
+    const base = tasks.reduce((m, t) => Math.max(m, t.sort_order ?? 0), -1);
+    const created = await supabase.from("tasks").insert(
+      rows.map(({ description, subject, itemId }, i) => ({
+        project_id: project.id, due_date: date || null, description, sort_order: base + 1 + i, on_hold: false, priority: false,
+        email_item_id: itemId, email_mailbox: itemId ? mailbox : null, email_subject: subject,
+      })),
+    ).catch(() => []);
+    if (!created.length) return false;
+    setTasks((prev) => [...prev, ...created]);
+    setMaildrop(null);
+    return true;
   };
 
   const patch = async (task, fields) => {
@@ -207,6 +264,15 @@ export default function TaskBoard({ projects, pickable }) {
               <div className="cell muted" style={{ flex: COL.client }}>{p?.client || "—"}</div>
               <div className={`cell fixed mono${overdue ? " overdue" : ""}`} style={{ width: COL.date }} title={overdue ? "Overdue" : undefined}>{formatDate(t.due_date) || "—"}</div>
               <div className="cell clickable" style={{ flex: COL.task }} onClick={() => setNotesFor(t)} title="Status notes">
+                {/* The title shows the subject the task was raised from, which is worth
+                    seeing even when the description has been reworded past recognition.
+                    stopPropagation so the envelope does not also open the notes. */}
+                {t.email_item_id && (
+                  <a className="mail-link" href={emailUrl(t.email_item_id)} target="_blank" rel="noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    title={t.email_subject ? `Open the email: ${t.email_subject}` : "Open the email this task came from"}
+                    aria-label="Open the email this task came from">{"✉"}</a>
+                )}
                 <span className="cell">{t.description}</span>
                 {done && <span className="mono" style={{ flex: "none", fontSize: "0.68rem", color: "var(--text-muted)" }}>done {formatStamp(t.completed_at)}</span>}
                 {noteCount[t.id] > 0 && <span className="badge">{noteCount[t.id]}</span>}
@@ -261,7 +327,73 @@ export default function TaskBoard({ projects, pickable }) {
         <NotesModal task={notesFor} notes={notes.filter((n) => n.task_id === notesFor.id)}
           onAdd={addNote} onToggle={toggleNote} onDelete={deleteNote} onClose={() => setNotesFor(null)} />
       )}
+
+      {/* pointer-events stay off so the overlay never swallows the drag events */}
+      {mailOver && (
+        <div className="mail-drop" aria-hidden="true">
+          <div className="mail-drop-card">
+            <span className="eyebrow">// from_email</span>
+            <strong>Drop to add a task</strong>
+          </div>
+        </div>
+      )}
+
+      {maildrop && (
+        <MailTaskModal drop={maildrop} pickable={pickable}
+          onCreate={addFromMail} onClose={() => setMaildrop(null)} />
+      )}
     </>
+  );
+}
+
+// The subjects arrive as the task descriptions, editable before saving: an
+// email subject is rarely worded as the thing you have to do. Each one keeps
+// the id of the message it came from, so the saved task can link back to it.
+function MailTaskModal({ drop, pickable, onCreate, onClose }) {
+  const [descs, setDescs] = useState(drop.messages.map((m) => m.subject));
+  const [project, setProject] = useState(null);
+  const [date, setDate] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  // The subject is kept as it arrived even when the description is reworded,
+  // because it is what the link searches on.
+  const kept = descs
+    .map((d, i) => ({ description: d.trim(), subject: drop.messages[i].subject, itemId: drop.messages[i].itemId }))
+    .filter((r) => r.description);
+  const ready = !!project && kept.length > 0 && !saving;
+  const save = async () => {
+    if (!ready) return;
+    setSaving(true);
+    if (!await onCreate(kept, project, date, drop.mailbox)) setSaving(false); // error is already on a toast
+  };
+  const setDesc = (i, v) => setDescs((prev) => prev.map((d, j) => (j === i ? v : d)));
+
+  return (
+    <Modal eyebrow="from_email" onClose={onClose}
+      title={descs.length === 1 ? "New task from email" : `New tasks from ${descs.length} emails`}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div className="field"><label>Project</label>
+          <SearchableDropdown options={pickable} value={project} onChange={setProject} autoFocus />
+        </div>
+        <div className="field"><label>Due date</label>
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input" />
+        </div>
+        <div className="field"><label>{descs.length === 1 ? "Task" : "Tasks"}</label>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 260, overflowY: "auto" }}>
+            {descs.map((d, i) => (
+              <input key={i} value={d} onChange={(e) => setDesc(i, e.target.value)} className="input"
+                onKeyDown={(e) => { if (e.key === "Enter") save(); }} />
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="modal-actions">
+        <button onClick={onClose} className="btn btn-ghost">Cancel</button>
+        <button onClick={save} className="btn btn-primary" disabled={!ready}>
+          {kept.length > 1 ? `Add ${kept.length} tasks` : "Add task"}
+        </button>
+      </div>
+    </Modal>
   );
 }
 
