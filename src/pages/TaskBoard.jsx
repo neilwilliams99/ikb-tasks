@@ -11,12 +11,10 @@ const ignore = () => {}; // errors are already shown by the supabase toast
 
 // `projects` is every project, used to show a task's project name even once
 // that project has been archived. `pickable` leaves the archived ones out, so
-// they cannot be chosen for new or edited tasks.
-export default function TaskBoard({ projects, pickable }) {
-  const [tasks, setTasks] = useState([]);
-  const [notes, setNotes] = useState([]);
-  const [loading, setLoading] = useState(true);
-
+// they cannot be chosen for new or edited tasks. The tasks and notes are held
+// by App and loaded once per session, so this page writes its changes back
+// through the setters rather than reloading them when the tab is opened.
+export default function TaskBoard({ projects, pickable, tasks, setTasks, notes, setNotes, loading }) {
   const [selProject, setSelProject] = useState(null);
   const [newDate, setNewDate] = useState("");
   const [newDesc, setNewDesc] = useState("");
@@ -33,13 +31,6 @@ export default function TaskBoard({ projects, pickable }) {
   const [mailOver, setMailOver] = useState(false);        // an email is being dragged over the page
   const [maildrop, setMaildrop] = useState(null);         // messages dropped, waiting on the dialog
   const mailDepth = useRef(0);                            // enter/leave nest as the cursor crosses children
-
-  useEffect(() => {
-    Promise.all([
-      supabase.from("tasks").select("order=sort_order.asc"),
-      supabase.from("task_notes").select("order=created_at.asc"),
-    ]).then(([t, n]) => { setTasks(t); setNotes(n); }).catch(ignore).finally(() => setLoading(false));
-  }, []);
 
   // ── Drop an email anywhere on the board to start a task from its subject ──
   // Listening on the window rather than a drop zone keeps the whole page a

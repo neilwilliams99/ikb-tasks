@@ -26,22 +26,27 @@ const payoffText = (s) => (s.paidOff ? `${monthLabel(s.payoffMonth)} · ${years(
 
 const belowMinText = (s) => `⚠ From ${monthLabel(s.belowMinFrom)} your fixed repayment is below the minimum, so the minimum is used. Add a repayment change to set a new amount.`;
 
-export default function Loans() {
-  const [loans, setLoans] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [taxRate, setTaxRate] = useState("");
+// The loans and the settings row are held by App and loaded once per session,
+// so this page writes its changes back through the setters rather than
+// reloading them when the tab is opened.
+export default function Loans({ loans, setLoans, loading, settings, setSettings, settingsLoading }) {
   const [selectedId, setSelectedId] = useState(null);
   const [editing, setEditing] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
 
-  useEffect(() => {
-    Promise.all([
-      supabase.from("loans").select("order=sort_order.asc,id.asc").then(setLoans),
-      supabase.from("loan_settings").select("id=eq.1").then(([s]) => setTaxRate(s ? String(s.tax_rate) : "39")),
-    ]).catch(() => {}).finally(() => setLoading(false));
-  }, []);
+  // Blank while the stored rate is still on its way, so the field does not
+  // flash a default; 39 only once we know there is nothing stored.
+  const storedRate = settings[0] ? String(settings[0].tax_rate) : settingsLoading ? "" : "39";
+  const [taxRate, setTaxRate] = useState(storedRate);
 
-  const saveTaxRate = () => supabase.from("loan_settings").update({ tax_rate: num(taxRate) }, 1).catch(() => {});
+  // Follow the stored rate as it arrives, and again after a save. On a return
+  // to the tab it is already here, so the field starts out right.
+  useEffect(() => { setTaxRate(storedRate); }, [storedRate]);
+
+  // Keeping the saved row means the rate survives a tab switch without being
+  // read back from the database.
+  const saveTaxRate = () => supabase.from("loan_settings").update({ tax_rate: num(taxRate) }, 1)
+    .then(([s]) => { if (s) setSettings([s]); }).catch(() => {});
 
   // Colour follows the loan (its place among all loans), not its rank on screen
   const colorOf = (l) => seriesColor(loans.findIndex((x) => x.id === l.id));

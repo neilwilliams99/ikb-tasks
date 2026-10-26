@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 import { jsPDF } from "jspdf";
 import { LOGO_BASE64 } from "../logoBase64.js";
 import { supabase } from "../lib/supabase.js";
@@ -46,28 +46,44 @@ function emptyForm() {
   };
 }
 
+// What the library is loaded with: every column except image_data. The pasted
+// screenshots are almost the whole weight of this table — megabytes against
+// kilobytes for everything else — and nothing in the list shows them, so the
+// one report being edited or printed fetches its own image instead (see
+// `withImage`). Any column added to the table has to be added here too, or
+// the library will not see it.
+export const LIST_COLUMNS = [
+  "id", "project_id", "to_company", "attention", "date", "ikb_reference",
+  "project_name", "issued_by", "subject", "ref_docs", "caveats",
+  "item1_text", "item2_text", "item3_text", "created_at", "items",
+  "hide_caveats", "hide_ref_docs", "hide_items", "hide_image",
+].join(",");
+
 // `projects` is every project, so a report already written against an archived
 // one still shows its name. `pickable` leaves archived ones out of the picker.
-export default function Reports({ projects, pickable }) {
+// The reports are held by App and loaded once per session, so this page writes
+// its changes back through `setReports` rather than reloading the library when
+// the tab is opened.
+export default function Reports({ projects, pickable, reports, setReports, loading }) {
   const [view, setView] = useState("library"); // "library" | "form"
-  const [reports, setReports] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [generating, setGenerating] = useState(null); // id of report being generated ("form" for the open form)
+  const [opening, setOpening] = useState(null);       // id of report being opened for edit
   const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState(emptyForm);
   const savedForm = useRef(JSON.stringify(emptyForm())); // to detect unsaved changes
 
-  useEffect(() => {
-    loadReports();
-  }, []);
-
-  const loadReports = async () => {
-    const data = await supabase.from("inspection_reports").select("order=created_at.desc").catch(() => null);
-    if (Array.isArray(data)) setReports(data);
-    setLoading(false);
+  // A library row arrives without its image, so the report being edited or
+  // printed reads its own. `undefined` means the column was never loaded;
+  // `null` means the report has no image, and is left alone. A row saved from
+  // the form keeps the image the database returned, so editing it twice over
+  // reads nothing the second time.
+  const withImage = async (r) => {
+    if (r.image_data !== undefined) return r;
+    const [row] = await supabase.from("inspection_reports").select(`id=eq.${r.id}`, "image_data");
+    return { ...r, image_data: row ? row.image_data : null };
   };
 
   const q = search.trim().toLowerCase();
@@ -154,47 +170,60 @@ export default function Reports({ projects, pickable }) {
 
     setSaving(true);
     try {
+      // The row the database hands back goes straight into the library, so it
+      // is right without reloading the whole list. New reports go to the front
+      // of it, which is where created_at.desc puts them.
       if (editingId) {
-        await supabase.from("inspection_reports").update(payload, editingId);
+        const [updated] = await supabase.from("inspection_reports").update(payload, editingId);
+        if (updated) setReports((prev) => prev.map((r) => (r.id === editingId ? updated : r)));
       } else {
-        await supabase.from("inspection_reports").insert(payload);
+        const [created] = await supabase.from("inspection_reports").insert(payload);
+        if (created) setReports((prev) => [created, ...prev]);
       }
     } catch {
       setSaving(false);
       return; // keep the form so nothing is lost; the error toast explains why
     }
     setSaving(false);
-    await loadReports();
     savedForm.current = JSON.stringify(form);
     setEditingId(null);
     setForm(emptyForm());
     setView("library");
   };
 
-  const editReport = (r) => {
+  const editReport = async (r) => {
+    setOpening(r.id);
+    let full;
+    try {
+      full = await withImage(r);
+    } catch {
+      setOpening(null);
+      return; // the error toast explains it; stay in the library
+    }
+    setOpening(null);
     openForm({
-      project_id: r.project_id,
-      to_company: r.to_company || "",
-      attention: r.attention || "",
-      date: r.date || "",
-      ikb_reference: r.ikb_reference || "",
-      project_name: r.project_name || "",
-      issued_by: r.issued_by || "Neil Williams",
-      subject: r.subject || "",
-      ref_docs: safeJson(r.ref_docs, [""]),
-      caveats: safeJson(r.caveats, [...DEFAULT_CAVEATS]),
-      hide_caveats: r.hide_caveats || false,
-      hide_ref_docs: r.hide_ref_docs || false,
-      hide_items: r.hide_items || false,
-      hide_image: r.hide_image || false,
-      items: safeJson(r.items, safeJson(r.item1_text ? JSON.stringify([
-        { text: r.item1_text },
-        { text: r.item2_text },
-        { text: "Amendments required on site prior to Pour (refer IKB Engineering mark-up):\n" + r.item3_text },
+      project_id: full.project_id,
+      to_company: full.to_company || "",
+      attention: full.attention || "",
+      date: full.date || "",
+      ikb_reference: full.ikb_reference || "",
+      project_name: full.project_name || "",
+      issued_by: full.issued_by || "Neil Williams",
+      subject: full.subject || "",
+      ref_docs: safeJson(full.ref_docs, [""]),
+      caveats: safeJson(full.caveats, [...DEFAULT_CAVEATS]),
+      hide_caveats: full.hide_caveats || false,
+      hide_ref_docs: full.hide_ref_docs || false,
+      hide_items: full.hide_items || false,
+      hide_image: full.hide_image || false,
+      items: safeJson(full.items, safeJson(full.item1_text ? JSON.stringify([
+        { text: full.item1_text },
+        { text: full.item2_text },
+        { text: "Amendments required on site prior to Pour (refer IKB Engineering mark-up):\n" + full.item3_text },
       ]) : null, [{ text: "" }])),
-      image: r.image_data || null,
-      imagePreview: r.image_data || null,
-    }, r.id);
+      image: full.image_data || null,
+      imagePreview: full.image_data || null,
+    }, full.id);
   };
 
   const deleteReport = async (r) => {
@@ -220,7 +249,9 @@ export default function Reports({ projects, pickable }) {
       const pw = 210, ph = 297;
       const ml = 20, mr = 20, contentW = pw - ml - mr;
 
-      const rd = reportData || form;
+      // Printing from the library: read that report's image before drawing,
+      // or page 2 would be left out of a report that has one.
+      const rd = reportData ? await withImage(reportData) : form;
       const refDocs = typeof rd.ref_docs === "string" ? safeJson(rd.ref_docs, []) : rd.ref_docs;
       const caveats = typeof rd.caveats === "string" ? safeJson(rd.caveats, []) : rd.caveats;
 
@@ -465,7 +496,7 @@ export default function Reports({ projects, pickable }) {
                 <div className="cell actions" style={{ width: 230 }}>
                   <button onClick={() => generatePdf(r)} disabled={generating !== null} className="btn btn-sm btn-ghost">{generating === r.id ? "…" : "PDF"}</button>
                   <button onClick={() => emailReport(r)} className="btn btn-sm btn-ghost">Email</button>
-                  <button onClick={() => editReport(r)} className="btn btn-sm btn-outline">Edit</button>
+                  <button onClick={() => editReport(r)} disabled={opening !== null} className="btn btn-sm btn-outline">{opening === r.id ? "…" : "Edit"}</button>
                   <button onClick={() => deleteReport(r)} className="btn btn-danger btn-icon" aria-label="Delete">{"✕"}</button>
                 </div>
               </div>
