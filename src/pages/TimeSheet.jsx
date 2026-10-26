@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { supabase } from "../lib/supabase.js";
 import { formatDate, formatStamp, today, money, num, has } from "../lib/format.js";
 import { SearchableDropdown, SortHeader, nextSort, sortBy, PageHead, Modal, FilterInput } from "../components/ui.jsx";
@@ -7,10 +7,11 @@ const COL = { project: 1.2, number: 76, client: 0.6, date: 84, desc: 1.6, units:
 const NO_FILTERS = { project: "", number: "", client: "", date: "", description: "" };
 
 // `projects` is every project, so an entry against an archived project still
-// shows its name. `pickable` leaves archived ones out of the picker.
-export default function TimeSheet({ projects, pickable }) {
-  const [entries, setEntries] = useState([]);
-  const [loading, setLoading] = useState(true);
+// shows its name. `pickable` leaves archived ones out of the picker. The
+// entries are held by App and loaded once per session, so this page writes
+// its changes back through `setEntries` rather than reloading them when the
+// tab is opened.
+export default function TimeSheet({ projects, pickable, entries, setEntries, loading }) {
   const [sort, setSort] = useState({ field: null, dir: "asc" });
   const [filters, setFilters] = useState(NO_FILTERS);
   const [editing, setEditing] = useState(null);
@@ -21,10 +22,6 @@ export default function TimeSheet({ projects, pickable }) {
   const [desc, setDesc] = useState("");
   const [units, setUnits] = useState("");
   const [rate, setRate] = useState("");
-
-  useEffect(() => {
-    supabase.from("timesheet").select("order=date.desc.nullslast,id.desc").then(setEntries).catch(() => {}).finally(() => setLoading(false));
-  }, []);
 
   const projectOf = (e) => projects.find((p) => p.id === e.project_id);
   const open = entries.filter((e) => !e.completed_at);

@@ -52,7 +52,9 @@ export const supabase = {
   },
   from(table) {
     return {
-      select: (filters = "") => supabase.query(table, { filters: `?select=*${filters ? "&" + filters : ""}` }),
+      // `columns` names the ones to read, for a table with a heavy column
+      // that most of the app never looks at; the default reads them all.
+      select: (filters = "", columns = "*") => supabase.query(table, { filters: `?select=${columns}${filters ? "&" + filters : ""}` }),
       insert: (body) => supabase.query(table, { method: "POST", body }),
       update: (body, id) => supabase.query(table, { method: "PATCH", body, filters: `?id=eq.${id}` }),
       delete: (id) => supabase.query(table, { method: "DELETE", filters: `?id=eq.${id}` }),
