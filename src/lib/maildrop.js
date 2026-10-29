@@ -1,26 +1,29 @@
 // ─── EMAIL DRAG ────────────────────────────────────────────────────────────
 // New Outlook and Outlook on the web put a JSON blob on the drag describing
-// the dragged rows. Which type it uses depends on how the mail list is set:
-// conversation view gives multimaillistconversationrows, message view gives
-// maillistrow. Both carry the same fields we want, so both are accepted --
-// the board must not care which way the list happens to be sorted that day.
+// the dragged rows. The type it goes under is named after how the mail list
+// is arranged at that moment, and the names keep multiplying: conversation
+// view has given multimaillistconversationrows, message view both maillistrow
+// and multimaillistmessagerows. Listing the names we have seen means a list
+// in some arrangement we have not drops silently, with no overlay and no
+// dialog to explain why, so match the shape of the name instead: an optional
+// "multi", "maillist", an optional word for the view, and "row" or "rows".
+// Every payload under these names has carried the same fields.
 //
 // Classic Win32 Outlook instead offers the message as a virtual .msg file,
 // which Chromium does not expose to the page at all, so a drag from that
 // build arrives with nothing readable and is ignored.
-export const MAIL_DRAG_TYPES = ["multimaillistconversationrows", "maillistrow"];
+export const MAIL_DRAG_TYPE = /^(multi)?maillist[a-z]*rows?$/;
 
 // `types` is readable during dragenter/dragover, where getData is not.
-const dragType = (dt) => MAIL_DRAG_TYPES.find((t) => Array.from(dt?.types || []).includes(t)) || null;
+const dragType = (dt) => Array.from(dt?.types || []).find((t) => MAIL_DRAG_TYPE.test(t)) || null;
 export const isMailDrag = (dt) => dragType(dt) !== null;
 
 const EMPTY = { mailbox: null, messages: [] };
 
 // One drag carries every selected message, so this always returns a list.
-// `subjects` runs parallel to the id arrays. Message view supplies itemIds,
-// which is the row actually dragged; conversation view supplies only
-// latestItemIds, which is the newest message in that conversation. Prefer the
-// exact one where Outlook gives it.
+// `subjects` runs parallel to the id arrays. Some payloads carry itemIds,
+// which is the row actually dragged; others only latestItemIds, the newest
+// message in that conversation. Prefer the exact one where Outlook gives it.
 export function messagesFrom(dt) {
   const type = dragType(dt);
   if (!type) return EMPTY;
